@@ -132,6 +132,9 @@ export function generateFetFile(project: Project): string {
   lines.push("");
 
   // Time constraints
+  // FET's not-available-time format uses <Day>/<Hour> subtags inside
+  // <Not_Available_Time> (verified against FET source rules.cpp).
+  const naSlot = (s: TimeSlot) => `<Day>${esc(s.day)}</Day><Hour>${esc(s.hour)}</Hour>`;
   lines.push(`<Time_Constraints_List>`);
   // Always include basic compulsory
   lines.push(`\t<ConstraintBasicCompulsoryTime>`);
@@ -146,7 +149,6 @@ export function generateFetFile(project: Project): string {
     const tName = (id?: string) =>
       p.teachers.find((t) => t.id === id)?.name ?? "";
     const sName = (id?: string) => studentDisplayName(p, id ?? "");
-    const slot = (s: TimeSlot) => `<Preferred_Day>${esc(s.day)}</Preferred_Day><Preferred_Hour>${esc(s.hour)}</Preferred_Hour>`;
 
     switch (c.type) {
       case "TeacherNotAvailable": {
@@ -155,7 +157,7 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t\t<Teacher>${esc(tName(c.teacherId))}</Teacher>`);
         lines.push(`\t\t<Number_of_Not_Available_Times>${c.notAvailableTimes?.length ?? 0}</Number_of_Not_Available_Times>`);
         for (const s of c.notAvailableTimes ?? []) {
-          lines.push(`\t\t<Not_Available_Time>${slot(s)}</Not_Available_Time>`);
+          lines.push(`\t\t<Not_Available_Time>${naSlot(s)}</Not_Available_Time>`);
         }
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
@@ -218,7 +220,7 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t\t<Students>${esc(sName(c.studentsSetId))}</Students>`);
         lines.push(`\t\t<Number_of_Not_Available_Times>${c.notAvailableTimes?.length ?? 0}</Number_of_Not_Available_Times>`);
         for (const s of c.notAvailableTimes ?? []) {
-          lines.push(`\t\t<Not_Available_Time>${slot(s)}</Not_Available_Time>`);
+          lines.push(`\t\t<Not_Available_Time>${naSlot(s)}</Not_Available_Time>`);
         }
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
@@ -329,7 +331,7 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t\t<Room>${esc(rName(c.roomId))}</Room>`);
         lines.push(`\t\t<Number_of_Not_Available_Times>${c.notAvailableTimes?.length ?? 0}</Number_of_Not_Available_Times>`);
         for (const s of c.notAvailableTimes ?? []) {
-          lines.push(`\t\t<Not_Available_Time><Not_Available_Day>${esc(s.day)}</Not_Available_Day><Not_Available_Hour>${esc(s.hour)}</Not_Available_Hour></Not_Available_Time>`);
+          lines.push(`\t\t<Not_Available_Time>${naSlot(s)}</Not_Available_Time>`);
         }
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
