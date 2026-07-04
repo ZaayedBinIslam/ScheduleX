@@ -7,10 +7,47 @@ fullstack University Timetable Generator that uses the **FET CLI** engine.
 
 | File | Size | Description |
 |------|------|-------------|
-| `unitimetable-source.zip` | ~232 KB | Source code (Windows-friendly zip) |
-| `unitimetable-source.tar.gz` | ~183 KB | Source code (gzip tarball) |
+| `unitimetable-source.zip` | ~1.7 MB | Source code **+ full git history** (zip) |
+| `unitimetable-source.tar.gz` | ~1.6 MB | Source code **+ full git history** (tarball) |
 
-Both archives contain the **same files**. Pick whichever you prefer.
+Both archives contain the **same files**, including the complete `.git`
+directory. Pick whichever format you prefer.
+
+### Git history included
+
+The archives include the `.git` folder, so after extracting you have a
+fully working git repository with all 19 commits:
+
+```bash
+unzip unitimetable-source.zip -d unitimetable
+cd unitimetable
+git log --oneline          # see the full commit history
+git branch                 # → * main
+git show HEAD              # inspect the latest commit
+```
+
+The commits are organized logically (conventional commits):
+
+```
+263c334 feat(timetable): add drag-and-drop to move and swap activities
+ead822f feat(ui): add .fet import and export buttons
+637e414 feat(api): add .fet export and import endpoints
+4a5d21f feat(fet): add .fet file import parser
+cea1dd6 fix(fet): emit correct <Day>/<Hour> subtags in not-available constraints
+ed2e76d chore: track shadcn/ui components, hooks, and utils
+69b2ef3 chore: add seed script demonstrating the API
+5b8ead4 feat(generate): add timetable generation page with live engine status
+d47fff5 feat(timetable): add interactive timetable view with conflict-aware editing
+fdb2db2 feat(wizard): add 9-step timetable setup wizard
+686d811 feat(ui): add app shell with HashRouter, layout, and dashboard
+f2d3636 feat(state): add typed API client and Zustand store
+d8742e5 feat(api): add projects CRUD and timetable generation routes
+764a39e feat(fet): add FET engine integration core
+dc4458f feat(db): add Project model for timetable projects
+f1ea456 chore: add project metadata, dependencies, and base config
+1494119 chore: refine .gitignore and stop tracking local .env
+396fec5 Initial commit
+```
 
 ## What's inside
 
