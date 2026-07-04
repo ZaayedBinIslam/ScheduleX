@@ -2,7 +2,7 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 import { useProjectStore } from "@/lib/store";
-import { saveTimetable } from "@/lib/api";
+import { saveTimetable, exportProjectUrl } from "@/lib/api";
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -204,6 +204,14 @@ export function TimetablePage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <a
+            href={exportProjectUrl(project.id)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-accent"
+            title="Download the .fet source file for this project"
+          >
+            <Download className="h-3.5 w-3.5" />
+            .fet
+          </a>
           <Button
             variant="outline"
             size="sm"

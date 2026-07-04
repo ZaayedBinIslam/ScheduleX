@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   createProject,
   deleteProject,
   fetchProjects,
+  importFetFile,
 } from "@/lib/api";
 import type { Project } from "@/lib/fet/types";
 import { projectStats } from "@/lib/fet/validate";
@@ -23,6 +24,7 @@ import {
   Users,
   DoorOpen,
   Layers,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -43,6 +45,9 @@ export function Dashboard() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
 
   const refresh = async () => {
@@ -60,6 +65,20 @@ export function Dashboard() {
   useEffect(() => {
     refresh();
   }, []);
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    setImportError(null);
+    try {
+      const content = await file.text();
+      const name = file.name.replace(/\.fet$/i, "");
+      const result = await importFetFile(content, name);
+      navigate(`/project/${result.project.id}`);
+    } catch (e) {
+      setImportError((e as Error).message);
+      setImporting(false);
+    }
+  };
 
   const handleCreate = async () => {
     setCreating(true);
@@ -107,6 +126,29 @@ export function Dashboard() {
               <Plus className="h-4 w-4" />
               New timetable project
             </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-background px-5 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            >
+              {importing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              Import .fet file
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".fet,.xml,application/xml,text/xml"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleImport(f);
+                e.target.value = "";
+              }}
+            />
             <a
               href="https://lalescu.ro/liviu/fet/doc/en/instructions.html"
               target="_blank"
@@ -119,6 +161,16 @@ export function Dashboard() {
           </div>
         </div>
       </section>
+
+      {importError && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div>
+            <p className="font-medium text-destructive">Import failed</p>
+            <p className="text-muted-foreground">{importError}</p>
+          </div>
+        </div>
+      )}
 
       {/* Feature cards */}
       <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -3,6 +3,7 @@
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useProjectStore } from "@/lib/store";
 import { validateProject } from "@/lib/fet/validate";
+import { exportProjectUrl } from "@/lib/api";
 import {
   Building2,
   CalendarDays,
@@ -13,6 +14,7 @@ import {
   DoorOpen,
   ShieldCheck,
   ClipboardCheck,
+  Download,
   Loader2,
   Sparkles,
   CalendarClock,
@@ -176,6 +178,14 @@ export function ProjectWorkspace() {
               View timetable
             </Button>
           )}
+
+          <a
+            href={exportProjectUrl(project.id)}
+            className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-accent"
+          >
+            <Download className="h-4 w-4" />
+            Export .fet file
+          </a>
         </aside>
 
         {/* Step content */}
