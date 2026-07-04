@@ -5,6 +5,19 @@ import { useProjectStore } from "@/lib/store";
 import { saveTimetable, exportProjectUrl } from "@/lib/api";
 import { useMemo, useState } from "react";
 import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  DragOverlay,
+  closestCenter,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { toast } from "@/hooks/use-toast";
+import {
   ArrowLeft,
   Save,
   Loader2,
@@ -19,12 +32,17 @@ import {
   CheckCircle2,
   Download,
   X,
+  Move,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
 import {
   buildMatrix,
   findConflicts,
+  checkMove,
+  checkSwap,
+  applyMove,
+  applySwap,
   occupancyStats,
   roomResources,
   studentResources,
@@ -32,7 +50,7 @@ import {
   teacherResources,
   type Conflict,
 } from "@/lib/fet/timetable-utils";
-import type { TimetableEntry } from "@/lib/fet/types";
+import type { Project, TimetableEntry } from "@/lib/fet/types";
 import {
   Dialog,
   DialogContent,
@@ -145,6 +163,62 @@ export function TimetablePage() {
         : project.timetable!.warnings,
     });
     setEditing(null);
+  };
+
+  // Drag-and-drop: move an activity to an empty slot, or swap two activities.
+  // Only applies if there are NO conflicts; otherwise toasts and reverts.
+  const onDragEnd = (activeId: string, targetDay: string, targetHour: string) => {
+    const dragged = entries.find((e) => e.activityId === Number(activeId));
+    if (!dragged) return;
+    // Don't drop onto itself.
+    if (dragged.day === targetDay && dragged.hour === targetHour) return;
+
+    // Is the target cell occupied by another activity?
+    const target = entries.find(
+      (e) => e.day === targetDay && e.hour === targetHour && e.activityId !== dragged.activityId
+    );
+
+    if (target) {
+      // SWAP
+      const conflicts = checkSwap(project, entries, dragged, target);
+      if (conflicts.length) {
+        toast({
+          title: "Cannot swap — conflicts",
+          description: conflicts.map((c) => c.message).join("; "),
+          variant: "destructive",
+        });
+        return;
+      }
+      const newEntries = applySwap(entries, dragged.activityId, target.activityId);
+      useProjectStore.getState().setTimetable({
+        ...project.timetable!,
+        entries: newEntries,
+      });
+      toast({
+        title: "Swapped",
+        description: `#${dragged.activityId} ↔ #${target.activityId}`,
+      });
+    } else {
+      // MOVE
+      const conflicts = checkMove(project, entries, dragged, targetDay, targetHour);
+      if (conflicts.length) {
+        toast({
+          title: "Cannot move — conflicts",
+          description: conflicts.map((c) => c.message).join("; "),
+          variant: "destructive",
+        });
+        return;
+      }
+      const newEntries = applyMove(entries, dragged.activityId, targetDay, targetHour);
+      useProjectStore.getState().setTimetable({
+        ...project.timetable!,
+        entries: newEntries,
+      });
+      toast({
+        title: "Moved",
+        description: `#${dragged.activityId} → ${targetDay} ${targetHour}`,
+      });
+    }
   };
 
   const onSave = async () => {
@@ -312,7 +386,9 @@ export function TimetablePage() {
       {matrix && currentResource ? (
         <TimetableMatrix
           matrix={matrix}
+          project={project}
           onEdit={(e) => setEditing(e)}
+          onDragEnd={onDragEnd}
         />
       ) : (
         <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
@@ -389,67 +465,198 @@ function StatTile({
 
 function TimetableMatrix({
   matrix,
+  project,
   onEdit,
+  onDragEnd,
 }: {
   matrix: ReturnType<typeof buildMatrix>;
+  project: Project;
   onEdit: (e: TimetableEntry) => void;
+  onDragEnd: (activeId: string, targetDay: string, targetHour: string) => void;
 }) {
-  const { days, hours, matrix: cells, covered } = matrix;
+  const { days, hours, matrix: cells, covered, filtered } = matrix;
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
+
+  const activeEntry = activeId
+    ? filtered.find((e) => String(e.activityId) === activeId) ?? null
+    : null;
+
+  const handleDragStart = (e: DragStartEvent) => {
+    setActiveId(String(e.active.id));
+  };
+  const handleDragEnd = (e: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = e;
+    if (!over) return;
+    // over.id format: "drop::DAY::HOUR"
+    const parts = String(over.id).split("::");
+    if (parts.length !== 3 || parts[0] !== "drop") return;
+    const [, day, hour] = parts;
+    onDragEnd(String(active.id), day, hour);
+  };
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <table className="w-full border-collapse text-xs">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-10 min-w-[80px] border-b border-r border-border bg-muted/60 px-3 py-2 text-left font-medium text-muted-foreground">
-              Time
-            </th>
-            {days.map((d) => (
-              <th
-                key={d}
-                className="min-w-[150px] border-b border-r border-border bg-muted/60 px-3 py-2 text-center font-semibold last:border-r-0"
-              >
-                {d}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveId(null)}
+    >
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 min-w-[80px] border-b border-r border-border bg-muted/60 px-3 py-2 text-left font-medium text-muted-foreground">
+                Time
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {hours.map((h, hi) => (
-            <tr key={h}>
-              <td className="sticky left-0 z-10 border-b border-r border-border bg-muted/30 px-3 py-2 font-medium text-muted-foreground">
-                {h}
-              </td>
-              {days.map((d, di) => {
-                const entry = cells[hi][di];
-                const coveredBy = covered[hi][di];
-                if (!entry && !coveredBy) {
-                  return (
-                    <td
-                      key={d}
-                      className="border-b border-r border-border p-1 last:border-r-0"
-                    >
-                      <div className="h-14 rounded-md border border-dashed border-border/60" />
-                    </td>
-                  );
-                }
-                if (entry) {
-                  return (
-                    <td
-                      key={d}
-                      className="border-b border-r border-border p-1 align-top last:border-r-0"
-                      rowSpan={entry.duration}
-                    >
-                      <ActivityCell entry={entry} onClick={() => onEdit(entry)} />
-                    </td>
-                  );
-                }
-                // covered by a multi-hour entry above
-                return null;
-              })}
+              {days.map((d) => (
+                <th
+                  key={d}
+                  className="min-w-[150px] border-b border-r border-border bg-muted/60 px-3 py-2 text-center font-semibold last:border-r-0"
+                >
+                  {d}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {hours.map((h, hi) => (
+              <tr key={h}>
+                <td className="sticky left-0 z-10 border-b border-r border-border bg-muted/30 px-3 py-2 font-medium text-muted-foreground">
+                  {h}
+                </td>
+                {days.map((d, di) => {
+                  const entry = cells[hi][di];
+                  const coveredBy = covered[hi][di];
+                  if (!entry && !coveredBy) {
+                    // Empty cell — droppable target for moves.
+                    return (
+                      <td
+                        key={d}
+                        className="border-b border-r border-border p-1 last:border-r-0"
+                      >
+                        <DropCell
+                          day={d}
+                          hour={h}
+                          active={Boolean(activeId)}
+                        />
+                      </td>
+                    );
+                  }
+                  if (entry) {
+                    // Activity cell — draggable AND droppable (for swaps).
+                    return (
+                      <td
+                        key={d}
+                        className="border-b border-r border-border p-1 align-top last:border-r-0"
+                        rowSpan={entry.duration}
+                      >
+                        <DraggableActivityCell
+                          entry={entry}
+                          day={d}
+                          hour={h}
+                          isDragging={activeId === String(entry.activityId)}
+                          onClick={() => onEdit(entry)}
+                        />
+                      </td>
+                    );
+                  }
+                  // covered by a multi-hour entry above — not a drop target.
+                  return null;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <DragOverlay>
+        {activeEntry ? (
+          <div className="rotate-2 opacity-80 shadow-lg">
+            <ActivityCell entry={activeEntry} onClick={() => {}} />
+          </div>
+        ) : null}
+      </DragOverlay>
+      {activeId && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Move className="h-3 w-3" />
+          Drag the activity onto an empty cell to move, or onto another
+          activity to swap. Conflicting drops are blocked.
+        </p>
+      )}
+    </DndContext>
+  );
+}
+
+// An empty cell that accepts dropped activities.
+function DropCell({
+  day,
+  hour,
+  active,
+}: {
+  day: string;
+  hour: string;
+  active: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `drop::${day}::${hour}`,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "h-14 rounded-md border border-dashed transition-colors",
+        isOver
+          ? "border-primary bg-primary/10"
+          : active
+            ? "border-primary/40 bg-primary/5"
+            : "border-border/60"
+      )}
+    />
+  );
+}
+
+// A draggable activity cell that is also a droppable swap target.
+function DraggableActivityCell({
+  entry,
+  day,
+  hour,
+  isDragging,
+  onClick,
+}: {
+  entry: TimetableEntry;
+  day: string;
+  hour: string;
+  isDragging: boolean;
+  onClick: () => void;
+}) {
+  const { setNodeRef: setDragRef, listeners, attributes, transform } =
+    useDraggable({ id: String(entry.activityId) });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `drop::${day}::${hour}`,
+  });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+  return (
+    <div
+      ref={(node) => {
+        setDragRef(node);
+        setDropRef(node);
+      }}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={cn(
+        "rounded-md transition-opacity",
+        isDragging && "opacity-40",
+        isOver && "ring-2 ring-primary ring-offset-1"
+      )}
+    >
+      <ActivityCell entry={entry} onClick={onClick} />
     </div>
   );
 }
@@ -463,9 +670,17 @@ function ActivityCell({
 }) {
   const color = subjectColor(entry.subjectName);
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="group flex h-full w-full flex-col rounded-md border-l-4 p-2 text-left transition-shadow hover:shadow-md"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className="group flex h-full w-full cursor-grab flex-col rounded-md border-l-4 p-2 text-left transition-shadow hover:shadow-md active:cursor-grabbing"
       style={{
         borderLeftColor: color,
         backgroundColor: `${color}14`,
@@ -475,7 +690,10 @@ function ActivityCell({
         <span className="text-xs font-semibold leading-tight">
           {entry.subjectName || "(no subject)"}
         </span>
-        <Pencil className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-60">
+          <Move className="h-3 w-3" />
+          <Pencil className="h-3 w-3" />
+        </div>
       </div>
       {entry.teacherNames.length > 0 && (
         <span className="mt-0.5 text-[10px] text-muted-foreground">
@@ -495,7 +713,7 @@ function ActivityCell({
       <span className="mt-auto pt-1 text-[9px] uppercase tracking-wide text-muted-foreground/70">
         #{entry.activityId} · {entry.duration}h
       </span>
-    </button>
+    </div>
   );
 }
 

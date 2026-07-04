@@ -157,3 +157,68 @@ export function occupancyStats(
     utilization: totalSlots ? Math.round((usedSlots / totalSlots) * 100) : 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop validation: move & swap
+// ---------------------------------------------------------------------------
+
+// Check if moving `entry` to (newDay, newHour) — keeping its room — is
+// conflict-free. Returns the list of conflicts (empty = ok to move).
+export function checkMove(
+  project: Project,
+  entries: TimetableEntry[],
+  entry: TimetableEntry,
+  newDay: string,
+  newHour: string
+): Conflict[] {
+  const others = entries.filter((e) => e.activityId !== entry.activityId);
+  return findConflicts(project, entry, newDay, newHour, entry.room, others);
+}
+
+// Check if swapping entry A with entry B (they exchange day/hour, keeping
+// their own rooms) is conflict-free. Returns combined conflicts for both.
+export function checkSwap(
+  project: Project,
+  entries: TimetableEntry[],
+  a: TimetableEntry,
+  b: TimetableEntry
+): Conflict[] {
+  const others = entries.filter(
+    (e) => e.activityId !== a.activityId && e.activityId !== b.activityId
+  );
+  // A goes to B's slot, B goes to A's slot.
+  const aMoved: TimetableEntry = { ...a, day: b.day, hour: b.hour };
+  const bMoved: TimetableEntry = { ...b, day: a.day, hour: a.hour };
+  const newEntries = [...others, aMoved, bMoved];
+  const ca = findConflicts(project, aMoved, aMoved.day, aMoved.hour, aMoved.room, newEntries);
+  const cb = findConflicts(project, bMoved, bMoved.day, bMoved.hour, bMoved.room, newEntries);
+  return [...ca, ...cb];
+}
+
+// Apply a move: returns a new entries array with the entry relocated.
+export function applyMove(
+  entries: TimetableEntry[],
+  activityId: number,
+  newDay: string,
+  newHour: string
+): TimetableEntry[] {
+  return entries.map((e) =>
+    e.activityId === activityId ? { ...e, day: newDay, hour: newHour } : e
+  );
+}
+
+// Apply a swap: returns a new entries array where A and B exchange day/hour.
+export function applySwap(
+  entries: TimetableEntry[],
+  aId: number,
+  bId: number
+): TimetableEntry[] {
+  const a = entries.find((e) => e.activityId === aId);
+  const b = entries.find((e) => e.activityId === bId);
+  if (!a || !b) return entries;
+  return entries.map((e) => {
+    if (e.activityId === aId) return { ...e, day: b.day, hour: b.hour };
+    if (e.activityId === bId) return { ...e, day: a.day, hour: a.hour };
+    return e;
+  });
+}
