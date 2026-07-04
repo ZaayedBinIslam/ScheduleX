@@ -1,0 +1,33 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createProject, listProjects } from "@/lib/fet/projectService";
+import { newProject, type Project } from "@/lib/fet/types";
+
+export async function GET() {
+  try {
+    const projects = await listProjects();
+    return NextResponse.json({ projects });
+  } catch (e) {
+    return NextResponse.json(
+      { error: (e as Error).message },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const name =
+      typeof body?.name === "string" && body.name.trim()
+        ? body.name.trim()
+        : "Untitled Project";
+    const project: Project = newProject(name);
+    const saved = await createProject(project);
+    return NextResponse.json({ project: saved }, { status: 201 });
+  } catch (e) {
+    return NextResponse.json(
+      { error: (e as Error).message },
+      { status: 500 }
+    );
+  }
+}
