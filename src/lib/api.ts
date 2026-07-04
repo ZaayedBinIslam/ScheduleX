@@ -101,3 +101,46 @@ export async function saveTimetable(
 ): Promise<Project> {
   return saveProject({ ...project, timetable, status: "generated" });
 }
+
+// --- Import / Export .fet files ---
+
+// Trigger a .fet file download for a project.
+export function exportProjectUrl(id: string): string {
+  return `/api/projects/${id}/export`;
+}
+
+export interface ImportResult {
+  project: Project;
+  warnings: string[];
+  stats: {
+    days: number;
+    hours: number;
+    teachers: number;
+    subjects: number;
+    activityTags: number;
+    years: number;
+    subgroups: number;
+    activities: number;
+    rooms: number;
+    timeConstraints: number;
+    spaceConstraints: number;
+    skippedConstraints: number;
+  };
+}
+
+// Import a .fet file's text content and create a new project.
+export async function importFetFile(
+  content: string,
+  name?: string
+): Promise<ImportResult> {
+  const res = await fetch("/api/projects/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, name }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error ?? `Import failed (${res.status})`);
+  }
+  return data as ImportResult;
+}
