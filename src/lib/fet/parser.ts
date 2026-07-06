@@ -55,46 +55,55 @@ export function parseFetOutput(outputDir: string, project: Project): {
 
   const parsed = parseActivitiesXml(raw);
 
-  // Map names back to ids & enrich display names.
-  const entries: TimetableEntry[] = parsed.map((pa) => {
-    const teacherIds = pa.teachers
-      .map((n) => project.teachers.find((t) => t.name === n)?.id)
-      .filter(Boolean) as string[];
-    const subjectId =
-      project.subjects.find((s) => s.name === pa.subject)?.id ?? "";
-    const tagIds = pa.activityTags
-      .map((n) => project.activityTags.find((t) => t.name === n)?.id)
-      .filter(Boolean) as string[];
-    const studentIds = pa.students
-      .map((n) => {
-        // match subgroup name
-        for (const y of project.students) {
-          for (const g of y.groups) {
-            for (const s of g.subgroups) {
-              if (s.name === n) return s.id;
+  // Merge scheduled times with original activity data
+  const entries: TimetableEntry[] = parsed
+    .map((pa) => {
+      const orig = project.activities.find((a) => a.id === pa.id);
+      if (!orig) return null;
+
+      const teacherNames = orig.teachers
+        .map((id) => project.teachers.find((t) => t.id === id)?.name)
+        .filter(Boolean) as string[];
+
+      const subjectName =
+        project.subjects.find((s) => s.id === orig.subject)?.name ?? "";
+
+      const activityTagNames = orig.activityTags
+        .map((id) => project.activityTags.find((t) => t.id === id)?.name)
+        .filter(Boolean) as string[];
+
+      const studentNames = orig.students
+        .map((id) => {
+          for (const y of project.students) {
+            if (y.id === id) return y.name;
+            for (const g of y.groups) {
+              if (g.id === id) return g.name;
+              for (const s of g.subgroups) {
+                if (s.id === id) return s.name;
+              }
             }
           }
-        }
-        return undefined;
-      })
-      .filter(Boolean) as string[];
+          return undefined;
+        })
+        .filter(Boolean) as string[];
 
-    return {
-      activityId: pa.id,
-      teacherIds,
-      subjectId,
-      activityTagIds: tagIds,
-      studentIds,
-      duration: pa.duration,
-      day: pa.day,
-      hour: pa.hour,
-      room: pa.room,
-      teacherNames: pa.teachers,
-      subjectName: pa.subject,
-      activityTagNames: pa.activityTags,
-      studentNames: pa.students,
-    };
-  });
+      return {
+        activityId: orig.id,
+        teacherIds: orig.teachers,
+        subjectId: orig.subject,
+        activityTagIds: orig.activityTags,
+        studentIds: orig.students,
+        duration: orig.duration,
+        day: pa.day,
+        hour: pa.hour,
+        room: pa.room,
+        teacherNames,
+        subjectName,
+        activityTagNames,
+        studentNames,
+      };
+    })
+    .filter(Boolean) as TimetableEntry[];
 
   // Determine unassigned (active activities with no entry)
   const assignedIds = new Set(entries.map((e) => e.activityId));
