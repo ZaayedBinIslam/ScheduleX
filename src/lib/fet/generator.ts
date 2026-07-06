@@ -20,18 +20,22 @@ export function generateFetFile(project: Project): string {
 
   // Days
   lines.push(`<Days_List>`);
-  lines.push(`\t<Number>${p.days.length}</Number>`);
+  lines.push(`\t<Number_of_Days>${p.days.length}</Number_of_Days>`);
   for (const d of p.days) {
-    lines.push(`\t<Name>${esc(d.name)}</Name>`);
+    lines.push(`\t<Day>`);
+    lines.push(`\t\t<Name>${esc(d.name)}</Name>`);
+    lines.push(`\t</Day>`);
   }
   lines.push(`</Days_List>`);
   lines.push("");
 
   // Hours
   lines.push(`<Hours_List>`);
-  lines.push(`\t<Number>${p.hours.length}</Number>`);
+  lines.push(`\t<Number_of_Hours>${p.hours.length}</Number_of_Hours>`);
   for (const h of p.hours) {
-    lines.push(`\t<Name>${esc(h.name)}</Name>`);
+    lines.push(`\t<Hour>`);
+    lines.push(`\t\t<Name>${esc(h.name)}</Name>`);
+    lines.push(`\t</Hour>`);
   }
   lines.push(`</Hours_List>`);
   lines.push("");
@@ -92,20 +96,23 @@ export function generateFetFile(project: Project): string {
   // Activities
   lines.push(`<Activities_List>`);
   for (const a of p.activities) {
-    if (!a.active) continue;
     const sgIds = activitySubgroups(p, a);
     lines.push(`\t<Activity>`);
-    lines.push(`\t\t<Teacher>${esc(p.teachers.find((t) => t.id === a.teachers[0])?.name ?? "")}</Teacher>`);
-    for (let i = 1; i < a.teachers.length; i++) {
-      lines.push(`\t\t<Teacher>${esc(p.teachers.find((t) => t.id === a.teachers[i])?.name ?? "")}</Teacher>`);
+    for (const tId of a.teachers) {
+      const t = p.teachers.find((t) => t.id === tId);
+      if (t) lines.push(`\t\t<Teacher>${esc(t.name)}</Teacher>`);
     }
-    lines.push(`\t\t<Subject>${esc(p.subjects.find((s) => s.id === a.subject)?.name ?? "")}</Subject>`);
+    const subj = p.subjects.find((s) => s.id === a.subject);
+    if (subj) {
+      lines.push(`\t\t<Subject>${esc(subj.name)}</Subject>`);
+    }
     for (const atId of a.activityTags) {
-      lines.push(`\t\t<Activity_Tag>${esc(p.activityTags.find((t) => t.id === atId)?.name ?? "")}</Activity_Tag>`);
+      const at = p.activityTags.find((t) => t.id === atId);
+      if (at) lines.push(`\t\t<Activity_Tag>${esc(at.name)}</Activity_Tag>`);
     }
     for (const sgId of sgIds) {
       const sg = findSubgroupName(p, sgId);
-      lines.push(`\t\t<Students>${esc(sg)}</Students>`);
+      if (sg) lines.push(`\t\t<Students>${esc(sg)}</Students>`);
     }
     lines.push(`\t\t<Duration>${a.duration}</Duration>`);
     lines.push(`\t\t<Total_Duration>${a.totalDuration || a.duration}</Total_Duration>`);
@@ -120,11 +127,26 @@ export function generateFetFile(project: Project): string {
 
   // Rooms
   const realRooms = p.rooms.filter((r) => !r.virtual);
+  
+  // Buildings
+  const buildings = new Set<string>();
+  for (const r of realRooms) {
+    if (r.building) buildings.add(r.building);
+  }
+  lines.push(`<Buildings_List>`);
+  for (const b of buildings) {
+    lines.push(`\t<Building>`);
+    lines.push(`\t\t<Name>${esc(b)}</Name>`);
+    lines.push(`\t</Building>`);
+  }
+  lines.push(`</Buildings_List>`);
+  lines.push("");
+
   lines.push(`<Rooms_List>`);
   for (const r of realRooms) {
     lines.push(`\t<Room>`);
     lines.push(`\t\t<Name>${esc(r.name)}</Name>`);
-    lines.push(`\t\t<Building>${esc(r.building || "")}</Building>`);
+    if (r.building) lines.push(`\t\t<Building>${esc(r.building)}</Building>`);
     lines.push(`\t\t<Capacity>${r.capacity}</Capacity>`);
     lines.push(`\t</Room>`);
   }
