@@ -59,6 +59,9 @@ export function GeneratePage() {
       setResult(res);
       setLog(res.log);
       setPhase("done");
+      
+      // Reload the project into the global store so the new timetable is available
+      useProjectStore.getState().load(id);
     } catch (e) {
       const err = e as Error & { issues?: ValidationIssue[] };
       setError(err.message);
