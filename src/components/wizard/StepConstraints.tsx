@@ -357,6 +357,12 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
     TwoActivitiesGrouped: "Two activities grouped",
     ThreeActivitiesGrouped: "Three activities grouped",
     ActivityEndsStudentsDay: "Activity ends students' day",
+    BreakTimes: "Break times",
+    MinDaysBetweenActivities: "Min days between activities",
+    ActivityPreferredTimeSlots: "Activity preferred time slots",
+    ActivitiesPreferredTimeSlots: "Activities preferred time slots",
+    ActivitiesSameStartingHour: "Activities same starting hour",
+    MinGapsBetweenActivities: "Min gaps between activities",
   };
 
   const setSlot = (slot: { day: string; hour: string } | undefined) => {
@@ -628,6 +634,11 @@ function SpaceConstraintCard({ c }: { c: SpaceConstraint }) {
     StudentsSetHomeRoom: "Students home room",
     RoomMaxCapacity: "Room max capacity",
     RoomNotAvailableTimes: "Room not available times",
+    ActivityPreferredRooms: "Activity preferred rooms",
+    SubjectPreferredRooms: "Subject preferred rooms",
+    SubjectActivityTagPreferredRoom: "Subject & tag preferred room",
+    ActivitiesOccupyMaxDifferentRooms: "Activities max different rooms",
+    ActivitiesSameRoomIfConsecutive: "Activities same room if consecutive",
   };
 
   return (
