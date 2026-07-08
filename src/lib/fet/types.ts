@@ -116,7 +116,14 @@ export type TimeConstraintType =
   | "MaxNDaysBetweenActivities"
   | "TwoActivitiesConsecutive"
   | "TwoActivitiesGrouped"
-  | "ActivityEndsStudentsDay";
+  | "ActivityEndsStudentsDay"
+  // New Time Constraints
+  | "BreakTimes"
+  | "MinDaysBetweenActivities"
+  | "ActivityPreferredTimeSlots"
+  | "ActivitiesPreferredTimeSlots"
+  | "ActivitiesSameStartingHour"
+  | "MinGapsBetweenActivities";
 
 export interface TimeConstraint {
   id: string;
@@ -125,7 +132,11 @@ export interface TimeConstraint {
   teacherId?: string;
   studentsSetId?: string;
   roomId?: string;
+  subjectId?: string;
+  activityTagId?: string;
   activityIds?: number[];
+  firstActivityId?: number;
+  secondActivityId?: number;
   maxDays?: number;
   maxHours?: number;
   maxGaps?: number;
@@ -133,9 +144,12 @@ export interface TimeConstraint {
   minNDays?: number;
   maxNDays?: number;
   minHours?: number;
+  minGapsBetweenActivities?: number;
+  consecutiveIfSameDay?: boolean;
   notAvailableTimes?: TimeSlot[];
   preferredTimes?: TimeSlot[];
   preferredStartingTime?: TimeSlot;
+  breakTimes?: TimeSlot[];
   active: boolean;
 }
 
@@ -156,7 +170,12 @@ export type SpaceConstraintType =
   | "TeacherPreferredRoom"
   | "ActivityPreferredRoom"
   | "StudentsSetHomeRoom"
-  | "RoomMaxCapacity";
+  | "RoomMaxCapacity"
+  // New Space Constraints
+  | "ActivityPreferredRooms"
+  | "SubjectActivityTagPreferredRoom"
+  | "ActivitiesOccupyMaxDifferentRooms"
+  | "ActivitiesSameRoomIfConsecutive";
 
 export interface SpaceConstraint {
   id: string;
@@ -165,10 +184,13 @@ export interface SpaceConstraint {
   teacherId?: string;
   studentsSetId?: string;
   subjectId?: string;
+  activityTagId?: string;
   roomId?: string;
   roomIds?: string[];
   activityId?: number;
+  activityIds?: number[];
   capacity?: number;
+  maxRooms?: number;
   notAvailableTimes?: TimeSlot[];
   active: boolean;
 }

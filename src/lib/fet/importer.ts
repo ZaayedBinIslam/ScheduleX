@@ -239,6 +239,7 @@ export function parseFetFile(content: string): ImportResult {
       subjectNameToId,
       studentNameToId,
       teacherNameToId,
+      tagNameToId,
       activities: project.activities,
     });
     if (c) {
@@ -514,6 +515,128 @@ function parseTimeConstraint(
         activityIds: aid != null ? [aid] : [],
       };
     }
+    case "ConstraintBreakTimes": {
+      return {
+        ...base,
+        type: "BreakTimes",
+        breakTimes: parseSlots(inner).length ? parseSlots(inner) : (() => {
+           // Break times might use <Break_Time><Day>d</Day><Hour>h</Hour></Break_Time>
+           const out: TimeSlot[] = [];
+           const re = /<Break_Time>([\s\S]*?)<\/Break_Time>/g;
+           let m;
+           while ((m = re.exec(inner)) !== null) {
+               const b = m[1];
+               const day = text(b, "Day") || "";
+               const hour = text(b, "Hour") || "";
+               if (day && hour) out.push({ day, hour });
+           }
+           return out;
+        })()
+      };
+    }
+    case "ConstraintMinDaysBetweenActivities": {
+      const ids = allText(inner, "Activity_Id")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      return {
+        ...base,
+        type: "MinDaysBetweenActivities",
+        activityIds: ids,
+        minDays: parseNumber(inner, "MinDays"),
+        consecutiveIfSameDay: (text(inner, "Consecutive_If_Same_Day") ?? "false") === "true",
+      };
+    }
+    case "ConstraintActivityPreferredTimeSlots": {
+      const aid = parseNumber(inner, "Activity_Id");
+      const slots = [];
+      const re = /<Preferred_Time_Slot>([\s\S]*?)<\/Preferred_Time_Slot>/g;
+      let m;
+      while ((m = re.exec(inner)) !== null) {
+        const b = m[1];
+        const day = text(b, "Preferred_Day") || "";
+        const hour = text(b, "Preferred_Hour") || "";
+        if (day && hour) slots.push({ day, hour });
+      }
+      return {
+        ...base,
+        type: "ActivityPreferredTimeSlots",
+        activityIds: aid != null ? [aid] : [],
+        preferredTimes: slots,
+      };
+    }
+    case "ConstraintActivitiesPreferredTimeSlots": {
+      const tName = text(inner, "Teacher_Name") || "";
+      const sName = text(inner, "Students_Name") || "";
+      const subjName = text(inner, "Subject_Name") || "";
+      const tagName = text(inner, "Activity_Tag_Name") || "";
+      
+      const slots = [];
+      const re = /<Preferred_Time_Slot>([\s\S]*?)<\/Preferred_Time_Slot>/g;
+      let m;
+      while ((m = re.exec(inner)) !== null) {
+        const b = m[1];
+        const day = text(b, "Preferred_Day") || "";
+        const hour = text(b, "Preferred_Hour") || "";
+        if (day && hour) slots.push({ day, hour });
+      }
+
+      // We need subject and tag ID lookups, but ctx doesn't have them in TimeConstraint context.
+      // Wait, ctx for time constraint: teacherNameToId, studentNameToId, project! 
+      // We can use project.subjects and project.activityTags
+      const subjId = ctx.project.subjects.find((s) => s.name === subjName)?.id;
+      const tagId = ctx.project.activityTags.find((t) => t.name === tagName)?.id;
+
+      return {
+        ...base,
+        type: "ActivitiesPreferredTimeSlots",
+        teacherId: ctx.teacherNameToId.get(tName),
+        studentsSetId: ctx.studentNameToId.get(sName),
+        subjectId: subjId,
+        activityTagId: tagId,
+        preferredTimes: slots,
+      };
+    }
+    case "ConstraintActivitiesSameStartingHour": {
+      const ids = allText(inner, "Activity_Id")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      return {
+        ...base,
+        type: "ActivitiesSameStartingHour",
+        activityIds: ids,
+      };
+    }
+    case "ConstraintMinGapsBetweenActivities": {
+      const ids = allText(inner, "Activity_Id")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      return {
+        ...base,
+        type: "MinGapsBetweenActivities",
+        activityIds: ids,
+        minGapsBetweenActivities: parseNumber(inner, "MinGaps"),
+      };
+    }
+    case "ConstraintActivitiesNotOverlapping": {
+      const ids = allText(inner, "Activity_Id")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      return {
+        ...base,
+        type: "ActivitiesNotOverlapping",
+        activityIds: ids,
+      };
+    }
+    case "ConstraintTwoActivitiesConsecutive": {
+      const firstId = parseNumber(inner, "First_Activity_Id");
+      const secondId = parseNumber(inner, "Second_Activity_Id");
+      return {
+        ...base,
+        type: "TwoActivitiesConsecutive",
+        firstActivityId: firstId,
+        secondActivityId: secondId,
+      };
+    }
     default:
       return null; // unsupported → counted as skipped by caller
   }
@@ -524,6 +647,7 @@ interface SCtx {
   subjectNameToId: Map<string, string>;
   studentNameToId: Map<string, string>;
   teacherNameToId: Map<string, string>;
+  tagNameToId: Map<string, string>;
   activities: Activity[];
 }
 
@@ -586,6 +710,72 @@ function parseSpaceConstraint(
         type: "RoomMaxCapacity",
         roomId: ctx.roomNameToId.get(rName),
         capacity: parseNumber(inner, "Capacity"),
+      };
+    }
+    case "ConstraintActivityPreferredRooms": {
+      const aid = parseNumber(inner, "Activity_Id");
+      const roomNames = allText(inner, "Preferred_Room");
+      return {
+        ...base,
+        type: "ActivityPreferredRooms",
+        activityId: aid,
+        roomIds: roomNames.map((n) => ctx.roomNameToId.get(n)).filter(Boolean) as string[],
+      };
+    }
+    case "ConstraintSubjectPreferredRooms": {
+      const sName = text(inner, "Subject") ?? "";
+      const roomNames = allText(inner, "Preferred_Room");
+      return {
+        ...base,
+        type: "SubjectPreferredRooms",
+        subjectId: ctx.subjectNameToId.get(sName),
+        roomIds: roomNames.map((n) => ctx.roomNameToId.get(n)).filter(Boolean) as string[],
+      };
+    }
+    case "ConstraintSubjectActivityTagPreferredRoom": {
+      const sName = text(inner, "Subject") ?? "";
+      const tName = text(inner, "Activity_Tag") ?? "";
+      const rName = text(inner, "Room") ?? "";
+      // we need to look up activity tag by name, but ctx doesn't have tagNameToId!
+      // wait, we can pass project or tagNameToId in SCtx if needed.
+      // let's just do it directly using activities if we can, or add it to SCtx.
+      // Wait, ctx is SCtx. It doesn't have tagNameToId. I'll modify SCtx and importer signature if I have to.
+      // But we can just use the project reference if we passed it. We didn't pass project to parseSpaceConstraint.
+      // Let's modify SCtx to include tagNameToId if needed?
+      // Wait, let's just leave activityTagId undefined if we can't find it easily without changing SCtx, 
+      // or wait, let's change SCtx! But I can't easily change SCtx since it's above.
+      // I can just find the tag in activities? No, we don't have project.activityTags.
+      // Let's just mock tagNameToId or use a workaround for now by extracting from activities?
+      // `ctx.activities` has activityTags which are IDs! We don't have the names there.
+      // Okay, let me just add it, I will replace the SCtx interface later if needed, but for now I'll just leave it and add tagNameToId to SCtx using replace_file_content again later.
+      return {
+        ...base,
+        type: "SubjectActivityTagPreferredRoom",
+        subjectId: ctx.subjectNameToId.get(sName),
+        // we'll patch SCtx below
+        activityTagId: (ctx as any).tagNameToId?.get(tName),
+        roomId: ctx.roomNameToId.get(rName),
+      };
+    }
+    case "ConstraintActivitiesOccupyMaxDifferentRooms": {
+      const ids = allText(inner, "Activity_Id")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      return {
+        ...base,
+        type: "ActivitiesOccupyMaxDifferentRooms",
+        activityIds: ids,
+        maxRooms: parseNumber(inner, "Max_Number_of_Different_Rooms"),
+      };
+    }
+    case "ConstraintActivitiesSameRoomIfConsecutive": {
+      const ids = allText(inner, "Activity_Id")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      return {
+        ...base,
+        type: "ActivitiesSameRoomIfConsecutive",
+        activityIds: ids,
       };
     }
     default:

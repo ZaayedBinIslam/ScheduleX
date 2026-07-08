@@ -321,6 +321,123 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t</ConstraintActivityEndsStudentsDay>`);
         break;
       }
+      case "BreakTimes": {
+        lines.push(`\t<ConstraintBreakTimes>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Number_of_Break_Times>${c.breakTimes?.length ?? 0}</Number_of_Break_Times>`);
+        for (const s of c.breakTimes ?? []) {
+          lines.push(`\t\t<Break_Time><Day>${esc(s.day)}</Day><Hour>${esc(s.hour)}</Hour></Break_Time>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintBreakTimes>`);
+        break;
+      }
+      case "MinDaysBetweenActivities": {
+        if (!c.activityIds?.length) break;
+        lines.push(`\t<ConstraintMinDaysBetweenActivities>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Consecutive_If_Same_Day>${c.consecutiveIfSameDay ? "true" : "false"}</Consecutive_If_Same_Day>`);
+        lines.push(`\t\t<Number_of_Activities>${c.activityIds.length}</Number_of_Activities>`);
+        for (const id of c.activityIds) {
+          lines.push(`\t\t<Activity_Id>${id}</Activity_Id>`);
+        }
+        lines.push(`\t\t<MinDays>${c.minDays ?? 1}</MinDays>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintMinDaysBetweenActivities>`);
+        break;
+      }
+      case "ActivityPreferredTimeSlots": {
+        const aid = c.activityIds?.[0];
+        if (!aid) break;
+        lines.push(`\t<ConstraintActivityPreferredTimeSlots>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Activity_Id>${aid}</Activity_Id>`);
+        lines.push(`\t\t<Number_of_Preferred_Time_Slots>${c.preferredTimes?.length ?? 0}</Number_of_Preferred_Time_Slots>`);
+        for (const s of c.preferredTimes ?? []) {
+          lines.push(`\t\t<Preferred_Time_Slot>`);
+          lines.push(`\t\t\t<Preferred_Day>${esc(s.day)}</Preferred_Day>`);
+          lines.push(`\t\t\t<Preferred_Hour>${esc(s.hour)}</Preferred_Hour>`);
+          lines.push(`\t\t</Preferred_Time_Slot>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintActivityPreferredTimeSlots>`);
+        break;
+      }
+      case "ActivitiesPreferredTimeSlots": {
+        lines.push(`\t<ConstraintActivitiesPreferredTimeSlots>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Teacher_Name>${esc(tName(c.teacherId))}</Teacher_Name>`);
+        lines.push(`\t\t<Students_Name>${esc(studentDisplayName(p, c.studentsSetId ?? ""))}</Students_Name>`);
+        const subjName = p.subjects.find(s => s.id === c.subjectId)?.name ?? "";
+        const tagName = p.activityTags.find(t => t.id === c.activityTagId)?.name ?? "";
+        lines.push(`\t\t<Subject_Name>${esc(subjName)}</Subject_Name>`);
+        lines.push(`\t\t<Activity_Tag_Name>${esc(tagName)}</Activity_Tag_Name>`);
+        lines.push(`\t\t<Number_of_Preferred_Time_Slots>${c.preferredTimes?.length ?? 0}</Number_of_Preferred_Time_Slots>`);
+        for (const s of c.preferredTimes ?? []) {
+          lines.push(`\t\t<Preferred_Time_Slot>`);
+          lines.push(`\t\t\t<Preferred_Day>${esc(s.day)}</Preferred_Day>`);
+          lines.push(`\t\t\t<Preferred_Hour>${esc(s.hour)}</Preferred_Hour>`);
+          lines.push(`\t\t</Preferred_Time_Slot>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintActivitiesPreferredTimeSlots>`);
+        break;
+      }
+      case "ActivitiesSameStartingHour": {
+        if (!c.activityIds?.length) break;
+        lines.push(`\t<ConstraintActivitiesSameStartingHour>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Number_of_Activities>${c.activityIds.length}</Number_of_Activities>`);
+        for (const id of c.activityIds) {
+          lines.push(`\t\t<Activity_Id>${id}</Activity_Id>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintActivitiesSameStartingHour>`);
+        break;
+      }
+      case "MinGapsBetweenActivities": {
+        if (!c.activityIds?.length) break;
+        lines.push(`\t<ConstraintMinGapsBetweenActivities>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Number_of_Activities>${c.activityIds.length}</Number_of_Activities>`);
+        for (const id of c.activityIds) {
+          lines.push(`\t\t<Activity_Id>${id}</Activity_Id>`);
+        }
+        lines.push(`\t\t<MinGaps>${c.minGapsBetweenActivities ?? 1}</MinGaps>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintMinGapsBetweenActivities>`);
+        break;
+      }
+      case "ActivitiesNotOverlapping": {
+        if (!c.activityIds?.length) break;
+        lines.push(`\t<ConstraintActivitiesNotOverlapping>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Number_of_Activities>${c.activityIds.length}</Number_of_Activities>`);
+        for (const id of c.activityIds) {
+          lines.push(`\t\t<Activity_Id>${id}</Activity_Id>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintActivitiesNotOverlapping>`);
+        break;
+      }
+      case "TwoActivitiesConsecutive": {
+        if (!c.firstActivityId || !c.secondActivityId) break;
+        lines.push(`\t<ConstraintTwoActivitiesConsecutive>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<First_Activity_Id>${c.firstActivityId}</First_Activity_Id>`);
+        lines.push(`\t\t<Second_Activity_Id>${c.secondActivityId}</Second_Activity_Id>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintTwoActivitiesConsecutive>`);
+        break;
+      }
       default:
         // unsupported constraint types are silently skipped to keep file valid
         break;
@@ -400,6 +517,71 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
         lines.push(`\t</ConstraintRoomMaxCapacity>`);
+        break;
+      }
+      case "ActivityPreferredRooms": {
+        lines.push(`\t<ConstraintActivityPreferredRooms>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Activity_Id>${c.activityId}</Activity_Id>`);
+        lines.push(`\t\t<Number_of_Preferred_Rooms>${c.roomIds?.length ?? 0}</Number_of_Preferred_Rooms>`);
+        for (const rId of c.roomIds ?? []) {
+          lines.push(`\t\t<Preferred_Room>${esc(rName(rId))}</Preferred_Room>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintActivityPreferredRooms>`);
+        break;
+      }
+      case "SubjectPreferredRooms": {
+        lines.push(`\t<ConstraintSubjectPreferredRooms>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Subject>${esc(sName(c.subjectId))}</Subject>`);
+        lines.push(`\t\t<Number_of_Preferred_Rooms>${c.roomIds?.length ?? 0}</Number_of_Preferred_Rooms>`);
+        for (const rId of c.roomIds ?? []) {
+          lines.push(`\t\t<Preferred_Room>${esc(rName(rId))}</Preferred_Room>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintSubjectPreferredRooms>`);
+        break;
+      }
+      case "SubjectActivityTagPreferredRoom": {
+        lines.push(`\t<ConstraintSubjectActivityTagPreferredRoom>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Subject>${esc(sName(c.subjectId))}</Subject>`);
+        const tagName = p.activityTags.find(t => t.id === c.activityTagId)?.name ?? "";
+        lines.push(`\t\t<Activity_Tag>${esc(tagName)}</Activity_Tag>`);
+        lines.push(`\t\t<Room>${esc(rName(c.roomId))}</Room>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintSubjectActivityTagPreferredRoom>`);
+        break;
+      }
+      case "ActivitiesOccupyMaxDifferentRooms": {
+        if (!c.activityIds?.length) break;
+        lines.push(`\t<ConstraintActivitiesOccupyMaxDifferentRooms>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Number_of_Activities>${c.activityIds.length}</Number_of_Activities>`);
+        for (const id of c.activityIds) {
+          lines.push(`\t\t<Activity_Id>${id}</Activity_Id>`);
+        }
+        lines.push(`\t\t<Max_Number_of_Different_Rooms>${c.maxRooms ?? 1}</Max_Number_of_Different_Rooms>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintActivitiesOccupyMaxDifferentRooms>`);
+        break;
+      }
+      case "ActivitiesSameRoomIfConsecutive": {
+        if (!c.activityIds?.length) break;
+        lines.push(`\t<ConstraintActivitiesSameRoomIfConsecutive>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Number_of_Activities>${c.activityIds.length}</Number_of_Activities>`);
+        for (const id of c.activityIds) {
+          lines.push(`\t\t<Activity_Id>${id}</Activity_Id>`);
+        }
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintActivitiesSameRoomIfConsecutive>`);
         break;
       }
       default:
