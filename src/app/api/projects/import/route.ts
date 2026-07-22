@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createProject } from "@/lib/fet/projectService";
 import { parseFetFile } from "@/lib/fet/importer";
 import { type Project } from "@/lib/fet/types";
+import { ProjectSchema } from "@/lib/fet/schema";
 
 // POST /api/projects/import
 // Accepts a .fet file content (raw text in the request body, or a `file`
@@ -46,12 +47,20 @@ export async function POST(req: NextRequest) {
     }
 
     const result = parseFetFile(content);
-    const project: Project = {
+    const candidate: Project = {
       ...result.project,
       name: overrideName?.trim() || result.project.name || "Imported project",
     };
 
-    const saved = await createProject(project);
+    const parsed = ProjectSchema.safeParse(candidate);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Imported project structure is invalid", issues: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const saved = await createProject(parsed.data);
     return NextResponse.json(
       { project: saved, warnings: result.warnings, stats: result.stats },
       { status: 201 }

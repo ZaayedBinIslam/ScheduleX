@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteProject, getProject, updateProject } from "@/lib/fet/projectService";
-import type { Project } from "@/lib/fet/types";
+import { ProjectSchema } from "@/lib/fet/schema";
 
 export async function GET(
   _req: NextRequest,
@@ -18,11 +18,19 @@ export async function PUT(
 ) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const project = body?.project as Project | undefined;
-  if (!project) {
+  if (!body?.project) {
     return NextResponse.json({ error: "Missing project body" }, { status: 400 });
   }
-  // Ensure id matches
+
+  const parsed = ProjectSchema.safeParse(body.project);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid project body", issues: parsed.error.issues },
+      { status: 400 }
+    );
+  }
+
+  const project = parsed.data;
   project.id = id;
   const updated = await updateProject(id, project);
   if (!updated)

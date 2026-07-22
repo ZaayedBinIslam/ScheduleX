@@ -44,15 +44,15 @@ export function roomName(p: Project, id: string): string {
 export function expandStudentSet(p: Project, id: string): string[] {
   for (const y of p.students) {
     if (y.id === id) {
-      return y.groups.flatMap((g) => g.subgroups.map((s) => s.id));
+      const subs = y.groups.flatMap((g) => g.subgroups.map((s) => s.id));
+      return subs.length ? subs : [id];
     }
     for (const g of y.groups) {
       if (g.id === id) {
-        return g.subgroups.map((s) => s.id);
+        return g.subgroups.length ? g.subgroups.map((s) => s.id) : [id];
       }
     }
   }
-  // already a subgroup (or unknown)
   return [id];
 }
 
@@ -63,13 +63,14 @@ export function activitySubgroups(p: Project, a: Activity): string[] {
 
 // Aggregate count of students involved in an activity.
 export function activityStudentCount(p: Project, a: Activity): number {
-  const ids = new Set(activitySubgroups(p, a));
   let count = 0;
-  for (const y of p.students) {
-    for (const g of y.groups) {
-      for (const s of g.subgroups) {
-        if (ids.has(s.id)) count += s.numberOfStudents;
-      }
+  for (const id of new Set(a.students)) {
+    for (const y of p.students) {
+      if (y.id === id) { count += y.numberOfStudents; break; }
+      const g = y.groups.find((g) => g.id === id);
+      if (g) { count += g.numberOfStudents; break; }
+      const sg = y.groups.flatMap((g) => g.subgroups).find((s) => s.id === id);
+      if (sg) { count += sg.numberOfStudents; break; }
     }
   }
   return count;

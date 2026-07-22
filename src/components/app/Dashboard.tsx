@@ -63,7 +63,20 @@ export function Dashboard() {
   };
 
   useEffect(() => {
-    refresh();
+    let mounted = true;
+    void fetchProjects()
+      .then((list) => {
+        if (mounted) {
+          setProjects(list);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleImport = async (file: File) => {

@@ -79,3 +79,5 @@ server.log
 # Runtime output directories
 /logs/
 /timetables/
+/test_out/
+test-out.fet

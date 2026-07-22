@@ -516,22 +516,25 @@ function parseTimeConstraint(
       };
     }
     case "ConstraintBreakTimes": {
+      const slots = parseSlots(inner);
       return {
         ...base,
         type: "BreakTimes",
-        breakTimes: parseSlots(inner).length ? parseSlots(inner) : (() => {
-           // Break times might use <Break_Time><Day>d</Day><Hour>h</Hour></Break_Time>
-           const out: TimeSlot[] = [];
-           const re = /<Break_Time>([\s\S]*?)<\/Break_Time>/g;
-           let m;
-           while ((m = re.exec(inner)) !== null) {
-               const b = m[1];
-               const day = text(b, "Day") || "";
-               const hour = text(b, "Hour") || "";
-               if (day && hour) out.push({ day, hour });
-           }
-           return out;
-        })()
+        breakTimes: slots.length
+          ? slots
+          : (() => {
+              // Break times might use <Break_Time><Day>d</Day><Hour>h</Hour></Break_Time>
+              const out: TimeSlot[] = [];
+              const re = /<Break_Time>([\s\S]*?)<\/Break_Time>/g;
+              let m;
+              while ((m = re.exec(inner)) !== null) {
+                const b = m[1];
+                const day = text(b, "Day") || "";
+                const hour = text(b, "Hour") || "";
+                if (day && hour) out.push({ day, hour });
+              }
+              return out;
+            })(),
       };
     }
     case "ConstraintMinDaysBetweenActivities": {
@@ -736,24 +739,11 @@ function parseSpaceConstraint(
       const sName = text(inner, "Subject") ?? "";
       const tName = text(inner, "Activity_Tag") ?? "";
       const rName = text(inner, "Room") ?? "";
-      // we need to look up activity tag by name, but ctx doesn't have tagNameToId!
-      // wait, we can pass project or tagNameToId in SCtx if needed.
-      // let's just do it directly using activities if we can, or add it to SCtx.
-      // Wait, ctx is SCtx. It doesn't have tagNameToId. I'll modify SCtx and importer signature if I have to.
-      // But we can just use the project reference if we passed it. We didn't pass project to parseSpaceConstraint.
-      // Let's modify SCtx to include tagNameToId if needed?
-      // Wait, let's just leave activityTagId undefined if we can't find it easily without changing SCtx, 
-      // or wait, let's change SCtx! But I can't easily change SCtx since it's above.
-      // I can just find the tag in activities? No, we don't have project.activityTags.
-      // Let's just mock tagNameToId or use a workaround for now by extracting from activities?
-      // `ctx.activities` has activityTags which are IDs! We don't have the names there.
-      // Okay, let me just add it, I will replace the SCtx interface later if needed, but for now I'll just leave it and add tagNameToId to SCtx using replace_file_content again later.
       return {
         ...base,
         type: "SubjectActivityTagPreferredRoom",
         subjectId: ctx.subjectNameToId.get(sName),
-        // we'll patch SCtx below
-        activityTagId: (ctx as any).tagNameToId?.get(tName),
+        activityTagId: ctx.tagNameToId.get(tName),
         roomId: ctx.roomNameToId.get(rName),
       };
     }

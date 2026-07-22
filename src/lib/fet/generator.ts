@@ -1,5 +1,5 @@
 import type { Project, TimeSlot } from "./types";
-import { activitySubgroups, esc } from "./resolve";
+import { esc } from "./resolve";
 
 // Generate a .fet file (XML) from a project.
 // Format reference: https://lalescu.ro/liviu/fet/doc/en/instructions.html
@@ -12,7 +12,7 @@ export function generateFetFile(project: Project): string {
   const lines: string[] = [];
 
   lines.push(`<?xml version="1.0" encoding="UTF-8"?>`);
-  lines.push(`<fet name="${esc(p.institution.name || p.name)}">`);
+  lines.push(`<fet version="6.24.0">`);
   lines.push("");
   lines.push(`<Institution_Name>${esc(p.institution.name || p.name)}</Institution_Name>`);
   lines.push(`<Comments>${esc(p.institution.comments || "")}</Comments>`);
@@ -40,16 +40,6 @@ export function generateFetFile(project: Project): string {
   lines.push(`</Hours_List>`);
   lines.push("");
 
-  // Teachers
-  lines.push(`<Teachers_List>`);
-  for (const t of p.teachers) {
-    lines.push(`\t<Teacher>`);
-    lines.push(`\t\t<Name>${esc(t.name)}</Name>`);
-    lines.push(`\t</Teacher>`);
-  }
-  lines.push(`</Teachers_List>`);
-  lines.push("");
-
   // Subjects
   lines.push(`<Subjects_List>`);
   for (const s of p.subjects) {
@@ -60,17 +50,27 @@ export function generateFetFile(project: Project): string {
   lines.push(`</Subjects_List>`);
   lines.push("");
 
-  // Activity tags
+  // Activity Tags
   lines.push(`<Activity_Tags_List>`);
-  for (const at of p.activityTags) {
+  for (const t of p.activityTags) {
     lines.push(`\t<Activity_Tag>`);
-    lines.push(`\t\t<Name>${esc(at.name)}</Name>`);
+    lines.push(`\t\t<Name>${esc(t.name)}</Name>`);
     lines.push(`\t</Activity_Tag>`);
   }
   lines.push(`</Activity_Tags_List>`);
   lines.push("");
 
-  // Students (Year > Group > Subgroup)
+  // Teachers
+  lines.push(`<Teachers_List>`);
+  for (const t of p.teachers) {
+    lines.push(`\t<Teacher>`);
+    lines.push(`\t\t<Name>${esc(t.name)}</Name>`);
+    lines.push(`\t</Teacher>`);
+  }
+  lines.push(`</Teachers_List>`);
+  lines.push("");
+
+  // Students (Years -> Groups -> Subgroups hierarchy)
   lines.push(`<Students_List>`);
   for (const y of p.students) {
     lines.push(`\t<Year>`);
@@ -96,7 +96,6 @@ export function generateFetFile(project: Project): string {
   // Activities
   lines.push(`<Activities_List>`);
   for (const a of p.activities) {
-    const sgIds = activitySubgroups(p, a);
     lines.push(`\t<Activity>`);
     for (const tId of a.teachers) {
       const t = p.teachers.find((t) => t.id === tId);
@@ -110,9 +109,11 @@ export function generateFetFile(project: Project): string {
       const at = p.activityTags.find((t) => t.id === atId);
       if (at) lines.push(`\t\t<Activity_Tag>${esc(at.name)}</Activity_Tag>`);
     }
-    for (const sgId of sgIds) {
-      const sg = findSubgroupName(p, sgId);
-      if (sg) lines.push(`\t\t<Students>${esc(sg)}</Students>`);
+    for (const sId of a.students) {
+      const name = studentDisplayName(p, sId);
+      if (name) {
+        lines.push(`\t\t<Students>${esc(name)}</Students>`);
+      }
     }
     lines.push(`\t\t<Duration>${a.duration}</Duration>`);
     lines.push(`\t\t<Total_Duration>${a.totalDuration || a.duration}</Total_Duration>`);
@@ -127,8 +128,6 @@ export function generateFetFile(project: Project): string {
 
   // Rooms
   const realRooms = p.rooms.filter((r) => !r.virtual);
-  
-  // Buildings
   const buildings = new Set<string>();
   for (const r of realRooms) {
     if (r.building) buildings.add(r.building);

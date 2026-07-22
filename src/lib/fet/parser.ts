@@ -135,39 +135,40 @@ function emptyTimetable(project: Project, warnings: string[]): Timetable {
   };
 }
 
-// Search recursively for an activities XML file.
 function findActivitiesFile(dir: string): string | null {
+  let entries: string[];
   try {
-    const entries = readdirSync(dir);
-    // Prefer "activities.xml"
-    const direct = entries.find((e) => /^activities.*\.xml$/i.test(e));
-    if (direct) return join(dir, direct);
-    for (const e of entries) {
-      const full = join(dir, e);
-      let st;
-      try {
-        st = statSync(full);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) {
+    entries = readdirSync(dir);
+  } catch {
+    return null;
+  }
+
+  // 1. Prefer the canonical FET output name at this level.
+  const direct = entries.find((e) => /(^|_)activities\.xml$/i.test(e));
+  if (direct) return join(dir, direct);
+
+  // 2. Recurse into subdirectories (FET writes to timetables/<basename>/).
+  for (const e of entries) {
+    const full = join(dir, e);
+    try {
+      if (statSync(full).isDirectory()) {
         const found = findActivitiesFile(full);
         if (found) return found;
       }
+    } catch {
+      /* ignore */
     }
-    // fallback: any xml that contains <Activity>
-    for (const e of entries) {
-      if (/\.xml$/i.test(e)) {
-        try {
-          const content = readFileSync(join(dir, e), "utf8");
-          if (content.includes("<Activity")) return join(dir, e);
-        } catch {
-          /* ignore */
-        }
-      }
+  }
+
+  // 3. Last resort: an xml that actually contains <Activity> blocks (not just <Activity_Tag>).
+  for (const e of entries) {
+    if (!/\.xml$/i.test(e)) continue;
+    try {
+      const content = readFileSync(join(dir, e), "utf8");
+      if (/<Activity>/.test(content)) return join(dir, e);
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
   }
   return null;
 }

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Project, Timetable } from "./types";
@@ -24,35 +24,65 @@ export interface RunResult {
   log: string;
 }
 
+function windowsFetCandidates(): string[] {
+  const roots = [
+    "C:\\Program Files\\FET",
+    "C:\\Program Files (x86)\\FET",
+    "C:\\Program Files\\fet",
+    "D:\\Programs\\fet",
+  ];
+  const out: string[] = [];
+  for (const root of roots) {
+    if (!existsSync(root)) continue;
+    // direct
+    for (const exe of ["fet-cl.exe", "fet-cl.bat", "fet.exe"]) {
+      const p = join(root, exe);
+      if (existsSync(p)) out.push(p);
+    }
+    // versioned subfolders (e.g. fet-7.8.7)
+    try {
+      for (const sub of readdirSync(root)) {
+        for (const exe of ["fet-cl.exe", "fet-cl.bat"]) {
+          const p = join(root, sub, exe);
+          if (existsSync(p)) out.push(p);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return out;
+}
+
 // Detect whether the fet CLI binary is available and return its path.
-// FET ships several binary names depending on platform/build:
-//   - fet            (Linux/macOS GUI+CLI build)
-//   - fet-cl         (Linux/macOS command-line build)
-//   - fet-cli        (some distros rename it)
-//   - fet.exe        (Windows GUI build — not usable headless)
-//   - fet-cl.exe     (Windows command-line build — the one to use on Windows)
-// We probe each candidate on PATH (and a few common absolute locations)
-// by running it with --version.
 export async function detectFetBinary(
   explicit?: string
 ): Promise<{ path: string | null; version: string | null }> {
-  const candidates = explicit
-    ? [explicit]
-    : [
-        "fet-cl",        // Windows console build (also resolves fet-cl.exe on Windows)
-        "fet-cl.exe",    // explicit Windows console build name
-        "fet",           // generic / Linux / macOS
-        "fet-cli",       // alternate name used by some packagers
+  let candidates: string[] = [];
+
+  if (explicit) {
+    candidates = [explicit];
+  } else {
+    const envPath = process.env.FET_BINARY_PATH;
+    if (envPath) {
+      candidates.push(envPath);
+    }
+    candidates.push("fet-cl", "fet-cl.exe", "fet", "fet-cli");
+    if (process.platform === "win32") {
+      candidates.push(...windowsFetCandidates());
+    } else {
+      candidates.push(
         "/usr/bin/fet",
         "/usr/local/bin/fet",
         "/usr/bin/fet-cl",
         "/usr/local/bin/fet-cl",
         "/opt/fet/fet",
-        "/opt/fet/fet-cl",
-      ];
+        "/opt/fet/fet-cl"
+      );
+    }
+  }
+
   for (const bin of candidates) {
-    // Try --version first; some FET builds only respond to --help or print
-    // version info to stderr on any invocation.
     const probeArgs = [["--version"], ["--help"], ["-v"]];
     let detected: { path: string; version: string | null } | null = null;
     for (const args of probeArgs) {
@@ -60,10 +90,8 @@ export async function detectFetBinary(
         const { stdout, stderr } = await run(bin, args, 8);
         const out = `${stdout}\n${stderr}`.trim();
         const vMatch = out.match(/(\d+\.\d+\.\d+)/);
-        // Accept the match as long as the process ran and produced some
-        // output containing "fet" or a version number. This avoids false
-        // positives from unrelated `fet` binaries.
-        if (out.length > 0 && (/fet/i.test(out) || vMatch || args[0] === "--version")) {
+        // Require output to contain /fet/i or a version number (remove --version catch-all)
+        if (out.length > 0 && (/fet/i.test(out) || vMatch)) {
           detected = { path: bin, version: vMatch ? vMatch[1] : null };
           break;
         }
@@ -82,6 +110,7 @@ export async function runGeneration(
   opts: RunOptions = {}
 ): Promise<RunResult> {
   const log: string[] = [];
+  const warnings: string[] = [];
   log.push(`[${ts()}] Starting timetable generation for "${project.name}"`);
 
   // Try the real FET binary first.
@@ -99,8 +128,12 @@ export async function runGeneration(
           log: log.join("\n"),
         };
       } catch (e) {
+        const errMsg = (e as Error).message;
         log.push(
-          `[${ts()}] FET run failed: ${(e as Error).message}. Falling back to internal scheduler.`
+          `[${ts()}] FET run failed: ${errMsg}. Falling back to internal scheduler.`
+        );
+        warnings.push(
+          `FET engine reported an error and was not used: ${errMsg.split("\n")[0]}. Showing fallback-scheduler result.`
         );
       }
     } else {
@@ -118,7 +151,7 @@ export async function runGeneration(
   return {
     timetable: tt,
     usedEngine: "fallback",
-    warnings: tt.warnings,
+    warnings: [...warnings, ...tt.warnings],
     log: log.join("\n"),
   };
 }
@@ -148,11 +181,48 @@ async function runFetCli(
     const combined = `${stdout}\n${stderr}`;
     log.push(`[${ts()}] FET finished. Output length: ${combined.length} bytes`);
 
+    // Surface detailed errors from FET's logs/errors.txt if present
+    const errorLogPath = join(outDir, "logs", "errors.txt");
+    const warningLogPath = join(outDir, "logs", "warnings.txt");
+    let fetErrors = "";
+    let fetWarnings: string[] = [];
+
+    if (existsSync(errorLogPath)) {
+      try {
+        const raw = readFileSync(errorLogPath, "utf8")
+          .replace(/^\uFEFF/, "")
+          .replace(/\0/g, "")
+          .trim();
+        if (raw) fetErrors = raw;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (existsSync(warningLogPath)) {
+      try {
+        const raw = readFileSync(warningLogPath, "utf8")
+          .replace(/^\uFEFF/, "")
+          .replace(/\0/g, "")
+          .trim();
+        if (raw) {
+          fetWarnings = raw.split("\n").map((s) => s.trim()).filter(Boolean);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (fetErrors) {
+      throw new Error(`FET Engine Error: ${fetErrors}`);
+    }
+
     if (!existsSync(outDir)) {
       throw new Error("FET did not create an output directory.");
     }
 
     const parsed = parseFetOutput(outDir, project);
+    parsed.warnings.push(...fetWarnings);
     log.push(
       `[${ts()}] Parsed ${parsed.timetable.entries.length} scheduled activities, ${parsed.timetable.unassigned.length} unassigned.`
     );
@@ -169,14 +239,17 @@ async function runFetCli(
 
 function run(bin: string, args: string[], timeoutSeconds: number) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    // On Windows, spawning needs `shell: true` so that `fet-cl` resolves to
-    // `fet-cl.exe` via PATH and so .bat/.cmd wrappers work. On Unix we keep
-    // shell:false for safety with the arg vector.
     const isWindows = process.platform === "win32";
+    // On Windows, if bin ends with .bat or .cmd we use shell: true.
+    // Otherwise, spawn directly with shell: false so arguments with spaces (like tmpdir paths)
+    // are passed cleanly without shell word-splitting.
+    const isBat = /\.bat$|\.cmd$/i.test(bin);
+    const useShell = isWindows && isBat;
+
     const child = spawn(bin, args, {
       env: process.env,
       cwd: process.cwd(),
-      shell: isWindows,
+      shell: useShell,
       windowsHide: true,
     });
     let stdout = "";

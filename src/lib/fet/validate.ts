@@ -46,11 +46,15 @@ export function validateProject(p: Project): ValidationIssue[] {
 
   // Students
   const sgNames = new Set<string>();
+  const validStudentIds = new Set<string>();
   for (const y of p.students) {
+    validStudentIds.add(y.id);
     if (!y.name.trim()) issues.push({ level: "error", message: "A student year has an empty name." });
     for (const g of y.groups) {
+      validStudentIds.add(g.id);
       if (!g.name.trim()) issues.push({ level: "error", message: `Group under ${y.name} has an empty name.` });
       for (const s of g.subgroups) {
+        validStudentIds.add(s.id);
         if (!s.name.trim()) issues.push({ level: "error", message: `A subgroup under ${y.name}/${g.name} has an empty name.` });
         if (sgNames.has(s.name)) issues.push({ level: "error", message: `Duplicate subgroup name: ${s.name}` });
         sgNames.add(s.name);
@@ -90,13 +94,12 @@ export function validateProject(p: Project): ValidationIssue[] {
     if (a.subject && !p.subjects.find((s) => s.id === a.subject))
       issues.push({ level: "error", message: `Activity #${a.id} references an unknown subject.` });
     for (const sid of a.students) {
-      const found = activitySubgroups(p, a).length > 0 || p.students.some((y) =>
-        y.groups.some((g) =>
-          g.subgroups.some((s) => s.id === sid) || g.id === sid || y.id === sid
-        )
-      );
-      if (!found)
-        issues.push({ level: "error", message: `Activity #${a.id} references unknown students.` });
+      if (!validStudentIds.has(sid)) {
+        issues.push({
+          level: "error",
+          message: `Activity #${a.id} references unknown student ID "${sid}".`,
+        });
+      }
     }
     // room capacity sanity
     const count = activityStudentCount(p, a);

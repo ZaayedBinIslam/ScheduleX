@@ -53,7 +53,7 @@ export function GeneratePage() {
 
     try {
       const res = await generateTimetable(id, {
-        forceFallback: forceFallback || !fetAvailable,
+        forceFallback: forceFallback,
         binaryPath: binaryPath.trim() || undefined,
       });
       setResult(res);
@@ -202,7 +202,7 @@ export function GeneratePage() {
           <InfoTile
             icon={<Terminal className="h-4 w-4" />}
             label="Version"
-            value={result?.fetVersion ?? fetAvailable ? "detected" : "n/a"}
+            value={result?.fetVersion ?? (fetAvailable ? "detected" : "n/a")}
           />
           <InfoTile
             icon={<CalendarClock className="h-4 w-4" />}

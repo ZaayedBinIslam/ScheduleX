@@ -49,11 +49,19 @@ export async function getProject(id: string): Promise<Project | null> {
 }
 
 export async function createProject(project: Project): Promise<Project> {
-  const { id, ...rest } = project;
+  const {
+    id: _id,
+    timetable: _tt,
+    status: _st,
+    name: _n,
+    createdAt: _c,
+    updatedAt: _u,
+    ...dataOnly
+  } = project;
   const row = await db.project.create({
     data: {
       name: project.name,
-      data: JSON.stringify(rest),
+      data: JSON.stringify(dataOnly),
       timetable: project.timetable ? JSON.stringify(project.timetable) : null,
       status: project.status,
     },
@@ -65,13 +73,21 @@ export async function updateProject(
   id: string,
   project: Project
 ): Promise<Project | null> {
-  const { id: _omit, ...rest } = project;
+  const {
+    id: _id,
+    timetable: _tt,
+    status: _st,
+    name: _n,
+    createdAt: _c,
+    updatedAt: _u,
+    ...dataOnly
+  } = project;
   try {
     const row = await db.project.update({
       where: { id },
       data: {
         name: project.name,
-        data: JSON.stringify(rest),
+        data: JSON.stringify(dataOnly),
         timetable: project.timetable ? JSON.stringify(project.timetable) : null,
         status: project.status,
       },
