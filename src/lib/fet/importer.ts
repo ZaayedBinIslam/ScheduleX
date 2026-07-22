@@ -548,7 +548,7 @@ function parseTimeConstraint(
     }
     case "ConstraintActivityPreferredTimeSlots": {
       const aid = parseNumber(inner, "Activity_Id");
-      const slots = [];
+      const slots: { day: string; hour: string }[] = [];
       const re = /<Preferred_Time_Slot>([\s\S]*?)<\/Preferred_Time_Slot>/g;
       let m;
       while ((m = re.exec(inner)) !== null) {
@@ -570,7 +570,7 @@ function parseTimeConstraint(
       const subjName = text(inner, "Subject_Name") || "";
       const tagName = text(inner, "Activity_Tag_Name") || "";
       
-      const slots = [];
+      const slots: { day: string; hour: string }[] = [];
       const re = /<Preferred_Time_Slot>([\s\S]*?)<\/Preferred_Time_Slot>/g;
       let m;
       while ((m = re.exec(inner)) !== null) {

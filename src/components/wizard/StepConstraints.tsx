@@ -333,6 +333,14 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
     value: String(a.id),
     label: `#${a.id} ${project.subjects.find((s) => s.id === a.subject)?.name ?? ""}`,
   }));
+  const subjectOptions = project.subjects.map((s) => ({
+    value: s.id,
+    label: s.name || "(unnamed)",
+  }));
+  const activityTagOptions = project.activityTags.map((t) => ({
+    value: t.id,
+    label: t.name || "(unnamed)",
+  }));
 
   const titleMap: Record<TimeConstraintType, string> = {
     BasicCompulsory: "Basic compulsory",
@@ -355,7 +363,6 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
     MaxNDaysBetweenActivities: "Max N days between",
     TwoActivitiesConsecutive: "Two activities consecutive",
     TwoActivitiesGrouped: "Two activities grouped",
-    ThreeActivitiesGrouped: "Three activities grouped",
     ActivityEndsStudentsDay: "Activity ends students' day",
     BreakTimes: "Break times",
     MinDaysBetweenActivities: "Min days between activities",
@@ -584,6 +591,143 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
         </>
       )}
 
+      {c.type === "BreakTimes" && (
+        <Field label="Break times">
+          <TimeSlotGrid
+            days={project.days.map((d) => d.name)}
+            hours={project.hours.map((h) => h.name)}
+            value={c.breakTimes ?? []}
+            onChange={(v) => update(c.id, { breakTimes: v })}
+          />
+        </Field>
+      )}
+
+      {c.type === "ActivityPreferredTimeSlots" && (
+        <>
+          <Field label="Activity">
+            <SingleSelect
+              options={activityOptions}
+              value={String(c.activityIds?.[0] ?? "")}
+              onChange={(v) =>
+                update(c.id, { activityIds: v ? [parseInt(v, 10)] : [] })
+              }
+              placeholder="Select activity"
+            />
+          </Field>
+          <Field label="Preferred time slots">
+            <TimeSlotGrid
+              days={project.days.map((d) => d.name)}
+              hours={project.hours.map((h) => h.name)}
+              value={c.preferredTimes ?? []}
+              onChange={(v) => update(c.id, { preferredTimes: v })}
+            />
+          </Field>
+        </>
+      )}
+
+      {c.type === "ActivitiesPreferredTimeSlots" && (
+        <>
+          <Field label="Teacher (optional)">
+            <SingleSelect
+              options={teacherOptions}
+              value={c.teacherId ?? ""}
+              onChange={(v) => update(c.id, { teacherId: v })}
+              placeholder="Any teacher"
+            />
+          </Field>
+          <Field label="Students (optional)">
+            <SingleSelect
+              options={studentOptions}
+              value={c.studentsSetId ?? ""}
+              onChange={(v) => update(c.id, { studentsSetId: v })}
+              placeholder="Any students"
+            />
+          </Field>
+          <Field label="Subject (optional)">
+            <SingleSelect
+              options={subjectOptions}
+              value={c.subjectId ?? ""}
+              onChange={(v) => update(c.id, { subjectId: v })}
+              placeholder="Any subject"
+            />
+          </Field>
+          <Field label="Activity tag (optional)">
+            <SingleSelect
+              options={activityTagOptions}
+              value={c.activityTagId ?? ""}
+              onChange={(v) => update(c.id, { activityTagId: v })}
+              placeholder="Any tag"
+            />
+          </Field>
+          <Field label="Preferred time slots">
+            <TimeSlotGrid
+              days={project.days.map((d) => d.name)}
+              hours={project.hours.map((h) => h.name)}
+              value={c.preferredTimes ?? []}
+              onChange={(v) => update(c.id, { preferredTimes: v })}
+            />
+          </Field>
+        </>
+      )}
+
+      {c.type === "MinDaysBetweenActivities" && (
+        <>
+          <Field label="Activities">
+            <MultiSelect
+              options={activityOptions}
+              value={(c.activityIds ?? []).map(String)}
+              onChange={(v) =>
+                update(c.id, { activityIds: v.map((x) => parseInt(x, 10)) })
+              }
+              placeholder="Select activities"
+            />
+          </Field>
+          <Field label="Consecutive if same day">
+            <div className="flex h-9 items-center px-3 border border-border rounded-md bg-background">
+              <Switch
+                checked={c.consecutiveIfSameDay ?? false}
+                onCheckedChange={(v) => update(c.id, { consecutiveIfSameDay: v })}
+              />
+            </div>
+          </Field>
+        </>
+      )}
+
+      {c.type === "ActivitiesSameStartingHour" && (
+        <Field label="Activities">
+          <MultiSelect
+            options={activityOptions}
+            value={(c.activityIds ?? []).map(String)}
+            onChange={(v) =>
+              update(c.id, { activityIds: v.map((x) => parseInt(x, 10)) })
+            }
+            placeholder="Select activities"
+          />
+        </Field>
+      )}
+
+      {c.type === "MinGapsBetweenActivities" && (
+        <>
+          <Field label="Activities">
+            <MultiSelect
+              options={activityOptions}
+              value={(c.activityIds ?? []).map(String)}
+              onChange={(v) =>
+                update(c.id, { activityIds: v.map((x) => parseInt(x, 10)) })
+              }
+              placeholder="Select activities"
+            />
+          </Field>
+          <Field label="Min gaps">
+            <NumberInput
+              value={c.minGapsBetweenActivities ?? 1}
+              min={1}
+              onChange={(v) => update(c.id, { minGapsBetweenActivities: v })}
+            />
+          </Field>
+        </>
+      )}
+
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Badge variant="outline" className="text-[10px]">
           weight {c.weight}%
@@ -623,6 +767,10 @@ function SpaceConstraintCard({ c }: { c: SpaceConstraint }) {
     value: String(a.id),
     label: `#${a.id} ${project.subjects.find((s) => s.id === a.subject)?.name ?? ""}`,
   }));
+  const activityTagOptions = project.activityTags.map((t) => ({
+    value: t.id,
+    label: t.name || "(unnamed)",
+  }));
 
   const titleMap: Record<SpaceConstraintType, string> = {
     BasicCompulsory: "Basic compulsory",
@@ -633,9 +781,7 @@ function SpaceConstraintCard({ c }: { c: SpaceConstraint }) {
     ActivityPreferredRoom: "Activity preferred room",
     StudentsSetHomeRoom: "Students home room",
     RoomMaxCapacity: "Room max capacity",
-    RoomNotAvailableTimes: "Room not available times",
     ActivityPreferredRooms: "Activity preferred rooms",
-    SubjectPreferredRooms: "Subject preferred rooms",
     SubjectActivityTagPreferredRoom: "Subject & tag preferred room",
     ActivitiesOccupyMaxDifferentRooms: "Activities max different rooms",
     ActivitiesSameRoomIfConsecutive: "Activities same room if consecutive",
@@ -734,6 +880,114 @@ function SpaceConstraintCard({ c }: { c: SpaceConstraint }) {
             />
           </Field>
         </>
+      )}
+
+      {c.type === "ActivityPreferredRooms" && (
+        <>
+          <Field label="Activity">
+            <SingleSelect
+              options={activityOptions}
+              value={String(c.activityId ?? "")}
+              onChange={(v) =>
+                update(c.id, { activityId: v ? parseInt(v, 10) : undefined })
+              }
+              placeholder="Select activity"
+            />
+          </Field>
+          <Field label="Preferred rooms">
+            <MultiSelect
+              options={roomOptions}
+              value={c.roomIds ?? []}
+              onChange={(v) => update(c.id, { roomIds: v })}
+              placeholder="Select rooms"
+            />
+          </Field>
+        </>
+      )}
+
+      {c.type === "SubjectPreferredRooms" && (
+        <>
+          <Field label="Subject">
+            <SingleSelect
+              options={subjectOptions}
+              value={c.subjectId ?? ""}
+              onChange={(v) => update(c.id, { subjectId: v })}
+              placeholder="Select subject"
+            />
+          </Field>
+          <Field label="Preferred rooms">
+            <MultiSelect
+              options={roomOptions}
+              value={c.roomIds ?? []}
+              onChange={(v) => update(c.id, { roomIds: v })}
+              placeholder="Select rooms"
+            />
+          </Field>
+        </>
+      )}
+
+      {c.type === "SubjectActivityTagPreferredRoom" && (
+        <>
+          <Field label="Subject">
+            <SingleSelect
+              options={subjectOptions}
+              value={c.subjectId ?? ""}
+              onChange={(v) => update(c.id, { subjectId: v })}
+              placeholder="Select subject"
+            />
+          </Field>
+          <Field label="Activity Tag">
+            <SingleSelect
+              options={activityTagOptions}
+              value={c.activityTagId ?? ""}
+              onChange={(v) => update(c.id, { activityTagId: v })}
+              placeholder="Select tag"
+            />
+          </Field>
+          <Field label="Preferred room">
+            <SingleSelect
+              options={roomOptions}
+              value={c.roomId ?? ""}
+              onChange={(v) => update(c.id, { roomId: v })}
+              placeholder="Select room"
+            />
+          </Field>
+        </>
+      )}
+
+      {c.type === "ActivitiesOccupyMaxDifferentRooms" && (
+        <>
+          <Field label="Activities">
+            <MultiSelect
+              options={activityOptions}
+              value={(c.activityIds ?? []).map(String)}
+              onChange={(v) =>
+                update(c.id, { activityIds: v.map((x) => parseInt(x, 10)) })
+              }
+              placeholder="Select activities"
+            />
+          </Field>
+          <Field label="Max different rooms">
+            <NumberInput
+              value={c.maxRooms ?? 1}
+              min={1}
+              onChange={(v) => update(c.id, { maxRooms: v })}
+            />
+          </Field>
+        </>
+      )}
+
+      {c.type === "ActivitiesSameRoomIfConsecutive" && (
+        <Field label="Activities">
+          <MultiSelect
+            options={activityOptions}
+            value={(c.activityIds ?? []).map(String)}
+            onChange={(v) =>
+              update(c.id, { activityIds: v.map((x) => parseInt(x, 10)) })
+            }
+            placeholder="Select activities"
+          />
+        </Field>
       )}
     </ConstraintShell>
   );

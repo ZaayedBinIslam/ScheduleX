@@ -802,7 +802,7 @@ function EditDialog({
                       key={h.name}
                       value={h.name}
                       disabled={
-                        project.hours.indexOf(h.name) + entry.duration >
+                        project.hours.indexOf(h) + entry.duration >
                         project.hours.length
                       }
                     >
