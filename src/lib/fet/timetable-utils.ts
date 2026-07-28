@@ -87,26 +87,53 @@ export function buildMatrix(
       })
     : entries;
 
-  // matrix[hourIndex][dayIndex] = entry that starts there (or null)
-  const matrix: (TimetableEntry | null)[][] = hours.map(() =>
-    days.map(() => null)
-  );
-  // covered[hourIndex][dayIndex] = entry id that spans into this cell (for multi-hour)
-  const covered: (number | null)[][] = hours.map(() =>
-    days.map(() => null)
-  );
+  // starts[hourIndex][dayIndex] = every entry beginning in that cell. It is a
+  // list because a manual move is allowed to create an overlap; the grid then
+  // stacks them in one cell rather than emitting a second <td>, which would
+  // push the remaining days one column to the right.
+  const starts: TimetableEntry[][][] = hours.map(() => days.map(() => []));
+
+  // blocked[hourIndex][dayIndex] = a multi-hour entry that began in an EARLIER
+  // row reaches into this cell, so the row must not render a <td> here at all.
+  const blocked: boolean[][] = hours.map(() => days.map(() => false));
+
+  // span[hourIndex][dayIndex] = rows the <td> starting here should cover.
+  const span: number[][] = hours.map(() => days.map(() => 1));
 
   for (const e of filtered) {
     const di = days.indexOf(e.day);
     const hi = hours.indexOf(e.hour);
     if (di < 0 || hi < 0) continue;
-    matrix[hi][di] = e;
-    for (let k = 0; k < e.duration; k++) {
-      if (hi + k < hours.length) covered[hi + k][di] = e.activityId;
+    starts[hi][di].push(e);
+    // Never span past the end of the day, or the table grows extra rows.
+    const rows = Math.max(1, Math.min(e.duration, hours.length - hi));
+    span[hi][di] = Math.max(span[hi][di], rows);
+    for (let k = 1; k < rows; k++) blocked[hi + k][di] = true;
+  }
+
+  // An entry starting inside another entry's span cannot own a <td>. Fold it
+  // into the covering cell so the column count per row stays exact.
+  for (let hi = 0; hi < hours.length; hi++) {
+    for (let di = 0; di < days.length; di++) {
+      if (!blocked[hi][di] || starts[hi][di].length === 0) continue;
+      const orphans = starts[hi][di];
+      starts[hi][di] = [];
+      for (let back = hi - 1; back >= 0; back--) {
+        if (starts[back][di].length > 0) {
+          starts[back][di].push(...orphans);
+          break;
+        }
+      }
     }
   }
 
-  return { days, hours, matrix, covered, filtered };
+  // matrix keeps the old "first entry starting here" shape for callers that
+  // only need a quick lookup.
+  const matrix: (TimetableEntry | null)[][] = starts.map((row) =>
+    row.map((list) => list[0] ?? null)
+  );
+
+  return { days, hours, matrix, starts, blocked, span, filtered };
 }
 
 // Resource lists for the view selector.

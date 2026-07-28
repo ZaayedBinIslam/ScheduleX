@@ -69,6 +69,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type ViewKind = "teacher" | "room" | "student";
 
+/**
+ * One period row, in pixels. Cards are sized from this rather than from CSS
+ * percentages so a duration-N activity covers exactly N rows.
+ */
+const ROW_HEIGHT = 68;
+/** Vertical padding the p-1 on each <td> contributes. */
+const CELL_PADDING = 8;
+
 export function TimetablePage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -474,7 +482,7 @@ function TimetableMatrix({
   onEdit: (e: TimetableEntry) => void;
   onDragEnd: (activeId: string, targetDay: string, targetHour: string) => void;
 }) {
-  const { days, hours, matrix: cells, covered, filtered } = matrix;
+  const { days, hours, starts, blocked, span, filtered } = matrix;
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -525,15 +533,18 @@ function TimetableMatrix({
           </thead>
           <tbody>
             {hours.map((h, hi) => (
-              <tr key={h}>
+              <tr key={h} style={{ height: ROW_HEIGHT }}>
                 <td className="sticky left-0 z-10 border-b border-r border-border bg-muted/30 px-3 py-2 font-medium text-muted-foreground">
                   {h}
                 </td>
                 {days.map((d, di) => {
-                  const entry = cells[hi][di];
-                  const coveredBy = covered[hi][di];
-                  if (!entry && !coveredBy) {
-                    // Empty cell — droppable target for moves.
+                  // A cell reached by a multi-hour activity from an earlier row
+                  // is owned by that activity's <td>; emitting anything here
+                  // would shift the rest of the row sideways.
+                  if (blocked[hi][di]) return null;
+
+                  const cellEntries = starts[hi][di];
+                  if (cellEntries.length === 0) {
                     return (
                       <td
                         key={d}
@@ -547,26 +558,34 @@ function TimetableMatrix({
                       </td>
                     );
                   }
-                  if (entry) {
-                    // Activity cell — draggable AND droppable (for swaps).
-                    return (
-                      <td
-                        key={d}
-                        className="border-b border-r border-border p-1 align-top last:border-r-0"
-                        rowSpan={entry.duration}
+
+                  const rows = span[hi][di];
+                  return (
+                    <td
+                      key={d}
+                      className="border-b border-r border-border p-1 align-top last:border-r-0"
+                      rowSpan={rows}
+                    >
+                      {/* Height is computed rather than inherited: a plain
+                          h-full collapses to content height here, which is why
+                          multi-hour cards used to cover only their first row. */}
+                      <div
+                        className="flex flex-col gap-1"
+                        style={{ height: rows * ROW_HEIGHT - CELL_PADDING }}
                       >
-                        <DraggableActivityCell
-                          entry={entry}
-                          day={d}
-                          hour={h}
-                          isDragging={activeId === String(entry.activityId)}
-                          onClick={() => onEdit(entry)}
-                        />
-                      </td>
-                    );
-                  }
-                  // covered by a multi-hour entry above — not a drop target.
-                  return null;
+                        {cellEntries.map((entry) => (
+                          <DraggableActivityCell
+                            key={entry.activityId}
+                            entry={entry}
+                            day={d}
+                            hour={h}
+                            isDragging={activeId === String(entry.activityId)}
+                            onClick={() => onEdit(entry)}
+                          />
+                        ))}
+                      </div>
+                    </td>
+                  );
                 })}
               </tr>
             ))}
@@ -607,8 +626,9 @@ function DropCell({
   return (
     <div
       ref={setNodeRef}
+      style={{ height: ROW_HEIGHT - CELL_PADDING }}
       className={cn(
-        "h-14 rounded-md border border-dashed transition-colors",
+        "rounded-md border border-dashed transition-colors",
         isOver
           ? "border-primary bg-primary/10"
           : active
@@ -651,7 +671,7 @@ function DraggableActivityCell({
       {...listeners}
       {...attributes}
       className={cn(
-        "rounded-md transition-opacity",
+        "min-h-0 flex-1 rounded-md transition-opacity",
         isDragging && "opacity-40",
         isOver && "ring-2 ring-primary ring-offset-1"
       )}
@@ -680,7 +700,7 @@ function ActivityCell({
           onClick();
         }
       }}
-      className="group flex h-full w-full cursor-grab flex-col rounded-md border-l-4 p-2 text-left transition-shadow hover:shadow-md active:cursor-grabbing"
+      className="group flex h-full w-full cursor-grab flex-col overflow-hidden rounded-md border-l-4 p-2 text-left transition-shadow hover:shadow-md active:cursor-grabbing"
       style={{
         borderLeftColor: color,
         backgroundColor: `${color}14`,
