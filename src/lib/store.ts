@@ -26,6 +26,85 @@ import { uid } from "@/lib/fet/resolve";
 
 type EntityId = string;
 
+/**
+ * Pick the first free "<base> <n>" name.
+ *
+ * Newly added entities are named rather than left blank: an empty name is a
+ * validation error, so blank defaults meant adding anything immediately put the
+ * project in an error state and every name had to be typed before the wizard
+ * would go green.
+ */
+function nextName(base: string, taken: Iterable<string>): string {
+  const used = new Set([...taken].map((n) => n.trim().toLowerCase()));
+  for (let i = 1; ; i++) {
+    const candidate = `${base} ${i}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+// Subgroup labels read better as "Year 1 A.1" than "Year 1 A 1".
+function nextSuffixedName(base: string, taken: Iterable<string>): string {
+  const used = new Set([...taken].map((n) => n.trim().toLowerCase()));
+  for (let i = 1; ; i++) {
+    const candidate = `${base}.${i}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+// Groups are lettered (A, B, … Z, AA) beneath their year.
+function letterFor(index: number): string {
+  let n = index;
+  let out = "";
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}
+
+const DEFAULT_SUBGROUP_SIZE = 30;
+
+const sumSubgroups = (subgroups: Subgroup[]) =>
+  subgroups.reduce((n, sg) => n + (sg.numberOfStudents || 0), 0);
+
+const sumGroups = (groups: StudentGroup[]) =>
+  groups.reduce((n, g) => n + (g.numberOfStudents || 0), 0);
+
+// A group is only schedulable through its subgroups, so never create a bare one.
+function makeGroup(name: string): StudentGroup {
+  const subgroup: Subgroup = {
+    id: uid("sg_"),
+    name: `${name}.1`,
+    numberOfStudents: DEFAULT_SUBGROUP_SIZE,
+  };
+  return {
+    id: uid("g_"),
+    name,
+    numberOfStudents: subgroup.numberOfStudents,
+    subgroups: [subgroup],
+  };
+}
+
+/** Every student-set id a year contributes: itself, its groups, its subgroups. */
+function studentIdsOf(year: StudentYear): Set<string> {
+  const ids = new Set<string>([year.id]);
+  for (const g of year.groups) {
+    ids.add(g.id);
+    for (const sg of g.subgroups) ids.add(sg.id);
+  }
+  return ids;
+}
+
+/** Recompute group and year totals from the subgroups beneath them. */
+function rollUp(year: StudentYear): StudentYear {
+  const groups = year.groups.map((g) =>
+    g.subgroups.length
+      ? { ...g, numberOfStudents: sumSubgroups(g.subgroups) }
+      : g
+  );
+  return { ...year, groups, numberOfStudents: sumGroups(groups) };
+}
+
 interface ProjectState {
   // The project currently loaded in the editor (null = not loaded)
   project: Project | null;
@@ -209,7 +288,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               ...touch(s.project),
               teachers: [
                 ...s.project.teachers,
-                { id: uid("t_"), name: "" },
+                {
+                  id: uid("t_"),
+                  name: nextName(
+                    "Teacher",
+                    s.project.teachers.map((t) => t.name)
+                  ),
+                },
               ],
             },
             dirty: true,
@@ -255,7 +340,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         ? {
             project: {
               ...touch(s.project),
-              subjects: [...s.project.subjects, { id: uid("s_"), name: "" }],
+              subjects: [
+                ...s.project.subjects,
+                {
+                  id: uid("s_"),
+                  name: nextName(
+                    "Subject",
+                    s.project.subjects.map((x) => x.name)
+                  ),
+                },
+              ],
             },
             dirty: true,
           }
@@ -300,7 +394,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               ...touch(s.project),
               activityTags: [
                 ...s.project.activityTags,
-                { id: uid("at_"), name: "" },
+                {
+                  id: uid("at_"),
+                  name: nextName(
+                    "Tag",
+                    s.project.activityTags.map((x) => x.name)
+                  ),
+                },
               ],
             },
             dirty: true,
@@ -340,20 +440,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   // ---- Students ----
   addYear: () =>
-    set((s) =>
-      s.project
-        ? {
-            project: {
-              ...touch(s.project),
-              students: [
-                ...s.project.students,
-                { id: uid("y_"), name: "", numberOfStudents: 0, groups: [] },
-              ],
+    set((s) => {
+      if (!s.project) return s;
+      const name = nextName(
+        "Year",
+        s.project.students.map((y) => y.name)
+      );
+      // A year with no subgroups schedules nothing, so seed the whole chain.
+      // The user can rename or add siblings; they never start from an empty box.
+      const group = makeGroup(`${name} A`);
+      return {
+        project: {
+          ...touch(s.project),
+          students: [
+            ...s.project.students,
+            {
+              id: uid("y_"),
+              name,
+              numberOfStudents: group.numberOfStudents,
+              groups: [group],
             },
-            dirty: true,
-          }
-        : s
-    ),
+          ],
+        },
+        dirty: true,
+      };
+    }),
   updateYear: (id, patch) =>
     set((s) =>
       s.project
@@ -369,39 +480,42 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         : s
     ),
   removeYear: (id) =>
-    set((s) =>
-      s.project
-        ? {
-            project: {
-              ...touch(s.project),
-              students: s.project.students.filter((y) => y.id !== id),
-            },
-            dirty: true,
-          }
-        : s
-    ),
+    set((s) => {
+      if (!s.project) return s;
+      const year = s.project.students.find((y) => y.id === id);
+      // Drop the year's own id and every group/subgroup under it, otherwise
+      // activities keep pointing at student sets that no longer exist.
+      const gone = year ? studentIdsOf(year) : new Set<string>();
+      return {
+        project: {
+          ...touch(s.project),
+          students: s.project.students.filter((y) => y.id !== id),
+          activities: s.project.activities.map((a) => ({
+            ...a,
+            students: a.students.filter((sid) => !gone.has(sid)),
+          })),
+        },
+        dirty: true,
+      };
+    }),
   addGroup: (yearId) =>
     set((s) =>
       s.project
         ? {
             project: {
               ...touch(s.project),
-              students: s.project.students.map((y) =>
-                y.id === yearId
-                  ? {
-                      ...y,
-                      groups: [
-                        ...y.groups,
-                        {
-                          id: uid("g_"),
-                          name: "",
-                          numberOfStudents: 0,
-                          subgroups: [],
-                        },
-                      ],
-                    }
-                  : y
-              ),
+              students: s.project.students.map((y) => {
+                if (y.id !== yearId) return y;
+                const taken = new Set(y.groups.map((g) => g.name));
+                // Walk the alphabet past names already in use in this year.
+                let letter = 0;
+                while (taken.has(`${y.name} ${letterFor(letter)}`)) letter++;
+                const groups = [
+                  ...y.groups,
+                  makeGroup(`${y.name} ${letterFor(letter)}`),
+                ];
+                return { ...y, groups, numberOfStudents: sumGroups(groups) };
+              }),
             },
             dirty: true,
           }
@@ -429,49 +543,62 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         : s
     ),
   removeGroup: (yearId, groupId) =>
-    set((s) =>
-      s.project
-        ? {
-            project: {
-              ...touch(s.project),
-              students: s.project.students.map((y) =>
-                y.id === yearId
-                  ? { ...y, groups: y.groups.filter((g) => g.id !== groupId) }
-                  : y
-              ),
-            },
-            dirty: true,
-          }
-        : s
-    ),
+    set((s) => {
+      if (!s.project) return s;
+      const group = s.project.students
+        .find((y) => y.id === yearId)
+        ?.groups.find((g) => g.id === groupId);
+      const gone = new Set<string>(
+        group ? [group.id, ...group.subgroups.map((sg) => sg.id)] : []
+      );
+      return {
+        project: {
+          ...touch(s.project),
+          students: s.project.students.map((y) =>
+            y.id === yearId
+              ? rollUp({
+                  ...y,
+                  groups: y.groups.filter((g) => g.id !== groupId),
+                })
+              : y
+          ),
+          activities: s.project.activities.map((a) => ({
+            ...a,
+            students: a.students.filter((sid) => !gone.has(sid)),
+          })),
+        },
+        dirty: true,
+      };
+    }),
   addSubgroup: (yearId, groupId) =>
     set((s) =>
       s.project
         ? {
             project: {
               ...touch(s.project),
-              students: s.project.students.map((y) =>
-                y.id === yearId
-                  ? {
-                      ...y,
-                      groups: y.groups.map((g) =>
-                        g.id === groupId
-                          ? {
-                              ...g,
-                              subgroups: [
-                                ...g.subgroups,
-                                {
-                                  id: uid("sg_"),
-                                  name: "",
-                                  numberOfStudents: 0,
-                                },
-                              ],
-                            }
-                          : g
+              students: s.project.students.map((y) => {
+                if (y.id !== yearId) return y;
+                const groups = y.groups.map((g) => {
+                  if (g.id !== groupId) return g;
+                  const subgroups = [
+                    ...g.subgroups,
+                    {
+                      id: uid("sg_"),
+                      name: nextSuffixedName(
+                        g.name,
+                        g.subgroups.map((sg) => sg.name)
                       ),
-                    }
-                  : y
-              ),
+                      numberOfStudents: DEFAULT_SUBGROUP_SIZE,
+                    },
+                  ];
+                  return {
+                    ...g,
+                    subgroups,
+                    numberOfStudents: sumSubgroups(subgroups),
+                  };
+                });
+                return { ...y, groups, numberOfStudents: sumGroups(groups) };
+              }),
             },
             dirty: true,
           }
@@ -485,7 +612,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               ...touch(s.project),
               students: s.project.students.map((y) =>
                 y.id === yearId
-                  ? {
+                  ? rollUp({
                       ...y,
                       groups: y.groups.map((g) =>
                         g.id === groupId
@@ -497,7 +624,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                             }
                           : g
                       ),
-                    }
+                    })
                   : y
               ),
             },
@@ -513,7 +640,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
               ...touch(s.project),
               students: s.project.students.map((y) =>
                 y.id === yearId
-                  ? {
+                  ? rollUp({
                       ...y,
                       groups: y.groups.map((g) =>
                         g.id === groupId
@@ -525,7 +652,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                             }
                           : g
                       ),
-                    }
+                    })
                   : y
               ),
               activities: s.project.activities.map((a) => ({
@@ -613,7 +740,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                 ...s.project.rooms,
                 {
                   id: uid("r_"),
-                  name: "",
+                  name: nextName(
+                    "Room",
+                    s.project.rooms.map((r) => r.name)
+                  ),
                   building: "",
                   capacity: 30,
                   virtual: false,
