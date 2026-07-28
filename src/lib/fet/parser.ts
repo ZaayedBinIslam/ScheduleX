@@ -148,16 +148,26 @@ function findActivitiesFile(dir: string): string | null {
   if (direct) return join(dir, direct);
 
   // 2. Recurse into subdirectories (FET writes to timetables/<basename>/).
-  for (const e of entries) {
-    const full = join(dir, e);
-    try {
-      if (statSync(full).isDirectory()) {
-        const found = findActivitiesFile(full);
-        if (found) return found;
+  //
+  // When FET stops early it leaves an empty <basename>/ plus two partial results:
+  // <basename>-highest/ (most activities placed) and <basename>-current/ (state at
+  // the moment it stopped). Search plain directories first so a complete solution
+  // always wins, then -highest, then -current.
+  const rank = (name: string) =>
+    /-current$/i.test(name) ? 2 : /-highest$/i.test(name) ? 1 : 0;
+  const dirs = entries
+    .filter((e) => {
+      try {
+        return statSync(join(dir, e)).isDirectory();
+      } catch {
+        return false;
       }
-    } catch {
-      /* ignore */
-    }
+    })
+    .sort((a, b) => rank(a) - rank(b));
+
+  for (const e of dirs) {
+    const found = findActivitiesFile(join(dir, e));
+    if (found) return found;
   }
 
   // 3. Last resort: an xml that actually contains <Activity> blocks (not just <Activity_Tag>).
