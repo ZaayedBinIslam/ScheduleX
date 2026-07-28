@@ -95,6 +95,64 @@ function studentIdsOf(year: StudentYear): Set<string> {
   return ids;
 }
 
+/**
+ * Drop constraints that point at entities the project no longer contains.
+ *
+ * The generator resolves ids to names when emitting, so a constraint left
+ * pointing at a deleted teacher or room emits an empty <Teacher></Teacher> and
+ * FET rejects the file — with an error that says nothing about the delete that
+ * caused it. A constraint whose subject is gone cannot be satisfied anyway.
+ */
+function pruneDanglingRefs(p: Project): Project {
+  const teacherIds = new Set(p.teachers.map((t) => t.id));
+  const subjectIds = new Set(p.subjects.map((s) => s.id));
+  const tagIds = new Set(p.activityTags.map((t) => t.id));
+  const roomIds = new Set(p.rooms.map((r) => r.id));
+  const activityIds = new Set(p.activities.map((a) => a.id));
+  const studentIds = new Set<string>();
+  for (const y of p.students) for (const id of studentIdsOf(y)) studentIds.add(id);
+
+  const alive = (c: TimeConstraint | SpaceConstraint): boolean => {
+    if (c.teacherId !== undefined && !teacherIds.has(c.teacherId)) return false;
+    if (c.subjectId !== undefined && !subjectIds.has(c.subjectId)) return false;
+    if (c.activityTagId !== undefined && !tagIds.has(c.activityTagId)) return false;
+    if (c.studentsSetId !== undefined && !studentIds.has(c.studentsSetId)) return false;
+    if (c.roomId !== undefined && !roomIds.has(c.roomId)) return false;
+    return true;
+  };
+
+  // Id lists are narrowed rather than dropped: losing one activity from a
+  // "same starting time" set still leaves a meaningful rule over the rest.
+  const narrow = <T extends TimeConstraint | SpaceConstraint>(c: T): T => {
+    const next = { ...c };
+    if (next.activityIds) {
+      next.activityIds = next.activityIds.filter((id) => activityIds.has(id));
+    }
+    if ("roomIds" in next && next.roomIds) {
+      next.roomIds = next.roomIds.filter((id: string) => roomIds.has(id));
+    }
+    return next;
+  };
+
+  const twoActivitiesAlive = (c: TimeConstraint) =>
+    (c.firstActivityId === undefined || activityIds.has(c.firstActivityId)) &&
+    (c.secondActivityId === undefined || activityIds.has(c.secondActivityId));
+
+  return {
+    ...p,
+    timeConstraints: p.timeConstraints
+      .filter((c) => alive(c) && twoActivitiesAlive(c))
+      .map(narrow),
+    spaceConstraints: p.spaceConstraints
+      .filter(
+        (c) =>
+          alive(c) &&
+          (c.activityId === undefined || activityIds.has(c.activityId))
+      )
+      .map(narrow),
+  };
+}
+
 /** Recompute group and year totals from the subgroups beneath them. */
 function rollUp(year: StudentYear): StudentYear {
   const groups = year.groups.map((g) =>
@@ -319,7 +377,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) =>
       s.project
         ? {
-            project: {
+            project: pruneDanglingRefs({
               ...touch(s.project),
               teachers: s.project.teachers.filter((t) => t.id !== id),
               // also drop from activities
@@ -327,7 +385,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                 ...a,
                 teachers: a.teachers.filter((tid) => tid !== id),
               })),
-            },
+            }),
             dirty: true,
           }
         : s
@@ -373,13 +431,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) =>
       s.project
         ? {
-            project: {
+            project: pruneDanglingRefs({
               ...touch(s.project),
               subjects: s.project.subjects.filter((x) => x.id !== id),
               activities: s.project.activities.map((a) =>
                 a.subject === id ? { ...a, subject: "" } : a
               ),
-            },
+            }),
             dirty: true,
           }
         : s
@@ -425,14 +483,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) =>
       s.project
         ? {
-            project: {
+            project: pruneDanglingRefs({
               ...touch(s.project),
               activityTags: s.project.activityTags.filter((x) => x.id !== id),
               activities: s.project.activities.map((a) => ({
                 ...a,
                 activityTags: a.activityTags.filter((tid) => tid !== id),
               })),
-            },
+            }),
             dirty: true,
           }
         : s
@@ -487,14 +545,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // activities keep pointing at student sets that no longer exist.
       const gone = year ? studentIdsOf(year) : new Set<string>();
       return {
-        project: {
+        project: pruneDanglingRefs({
           ...touch(s.project),
           students: s.project.students.filter((y) => y.id !== id),
           activities: s.project.activities.map((a) => ({
             ...a,
             students: a.students.filter((sid) => !gone.has(sid)),
           })),
-        },
+        }),
         dirty: true,
       };
     }),
@@ -552,7 +610,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         group ? [group.id, ...group.subgroups.map((sg) => sg.id)] : []
       );
       return {
-        project: {
+        project: pruneDanglingRefs({
           ...touch(s.project),
           students: s.project.students.map((y) =>
             y.id === yearId
@@ -566,7 +624,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             ...a,
             students: a.students.filter((sid) => !gone.has(sid)),
           })),
-        },
+        }),
         dirty: true,
       };
     }),
@@ -636,7 +694,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) =>
       s.project
         ? {
-            project: {
+            project: pruneDanglingRefs({
               ...touch(s.project),
               students: s.project.students.map((y) =>
                 y.id === yearId
@@ -659,7 +717,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                 ...a,
                 students: a.students.filter((sid) => sid !== sgId),
               })),
-            },
+            }),
             dirty: true,
           }
         : s
@@ -720,10 +778,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) =>
       s.project
         ? {
-            project: {
+            project: pruneDanglingRefs({
               ...touch(s.project),
               activities: s.project.activities.filter((a) => a.id !== id),
-            },
+            }),
             dirty: true,
           }
         : s
@@ -772,10 +830,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) =>
       s.project
         ? {
-            project: {
+            project: pruneDanglingRefs({
               ...touch(s.project),
               rooms: s.project.rooms.filter((r) => r.id !== id),
-            },
+            }),
             dirty: true,
           }
         : s
