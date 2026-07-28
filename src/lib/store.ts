@@ -153,14 +153,24 @@ function pruneDanglingRefs(p: Project): Project {
   };
 }
 
-/** Recompute group and year totals from the subgroups beneath them. */
+/**
+ * Recompute group and year totals from the level beneath them.
+ *
+ * Only a non-zero child total overwrites its parent. Real .fet files routinely
+ * record the headcount on the group and leave every subgroup at 0, and rolling
+ * those up would wipe the only real number the project has.
+ */
 function rollUp(year: StudentYear): StudentYear {
-  const groups = year.groups.map((g) =>
-    g.subgroups.length
-      ? { ...g, numberOfStudents: sumSubgroups(g.subgroups) }
-      : g
-  );
-  return { ...year, groups, numberOfStudents: sumGroups(groups) };
+  const groups = year.groups.map((g) => {
+    const sum = sumSubgroups(g.subgroups);
+    return sum > 0 ? { ...g, numberOfStudents: sum } : g;
+  });
+  const total = sumGroups(groups);
+  return {
+    ...year,
+    groups,
+    numberOfStudents: total > 0 ? total : year.numberOfStudents,
+  };
 }
 
 interface ProjectState {
