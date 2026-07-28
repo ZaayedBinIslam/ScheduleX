@@ -74,11 +74,23 @@ export function parseFetFile(content: string): ImportResult {
   const teachersBlock = block(content, "Teachers_List") ?? "";
   const teacherBlocks = allBlocks(teachersBlock, "Teacher");
   const teacherNameToId = new Map<string, string>();
+  // Qualified subjects are names here; subject ids do not exist until the
+  // subjects list is read below, so resolve them in a second pass.
+  const qualifiedSubjectNames = new Map<string, string[]>();
   for (const tb of teacherBlocks) {
     const name = text(tb, "Name") ?? "";
     const id = uid("t_");
-    project.teachers.push({ id, name });
+    const target = parseNumber(tb, "Target_Number_of_Hours");
+    project.teachers.push({
+      id,
+      name,
+      code: text(tb, "Code") ?? undefined,
+      longName: text(tb, "Long_Name") ?? undefined,
+      targetHours: target && target > 0 ? target : undefined,
+    });
     teacherNameToId.set(name, id);
+    const qs = allText(block(tb, "Qualified_Subjects") ?? "", "Qualified_Subject");
+    if (qs.length) qualifiedSubjectNames.set(id, qs);
   }
 
   // --- Subjects ---
@@ -90,6 +102,16 @@ export function parseFetFile(content: string): ImportResult {
     const id = uid("s_");
     project.subjects.push({ id, name });
     subjectNameToId.set(name, id);
+  }
+
+  // Second pass now that subject ids exist.
+  for (const t of project.teachers) {
+    const names = qualifiedSubjectNames.get(t.id);
+    if (!names) continue;
+    const ids = names
+      .map((n) => subjectNameToId.get(n))
+      .filter(Boolean) as string[];
+    if (ids.length) t.subjects = ids;
   }
 
   // --- Activity tags ---

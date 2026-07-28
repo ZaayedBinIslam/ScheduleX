@@ -14,9 +14,22 @@ export const HourConfigSchema = z.object({
   name: z.string(),
 });
 
+export const TimeSlotSchema = z.object({
+  day: z.string(),
+  hour: z.string(),
+});
+
 export const TeacherSchema = z.object({
   id: z.string(),
   name: z.string(),
+  code: z.string().optional(),
+  longName: z.string().optional(),
+  subjects: z.array(z.string()).optional(),
+  targetHours: z.number().optional(),
+  maxHoursDaily: z.number().optional(),
+  maxDaysPerWeek: z.number().optional(),
+  maxGapsPerWeek: z.number().optional(),
+  notAvailableTimes: z.array(TimeSlotSchema).optional(),
 });
 
 export const SubjectSchema = z.object({
@@ -69,11 +82,6 @@ export const ActivitySchema = z.object({
   isSplit: z.boolean(),
   active: z.boolean(),
   comments: z.string().optional().default(""),
-});
-
-export const TimeSlotSchema = z.object({
-  day: z.string(),
-  hour: z.string(),
 });
 
 export const TimeConstraintSchema = z.object({

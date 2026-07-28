@@ -9,6 +9,7 @@ import {
 } from "./shared";
 import { Input } from "@/components/ui";
 import { BookOpen, Tag } from "lucide-react";
+import { useFocusOnAdd } from "./useFocusOnAdd";
 
 export function StepSubjects() {
   const project = useProjectStore((s) => s.project)!;
@@ -18,6 +19,12 @@ export function StepSubjects() {
   const addTag = useProjectStore((s) => s.addActivityTag);
   const updateTag = useProjectStore((s) => s.updateActivityTag);
   const removeTag = useProjectStore((s) => s.removeActivityTag);
+
+  const { containerRef: subjectsRef, handleAdd: addSubjectFocused } =
+    useFocusOnAdd(project.subjects.length);
+  const { containerRef: tagsRef, handleAdd: addTagFocused } = useFocusOnAdd(
+    project.activityTags.length
+  );
 
   return (
     <div>
@@ -40,13 +47,13 @@ export function StepSubjects() {
                 {project.subjects.length} subject(s)
               </p>
             </div>
-            <AddButton onClick={addSubject} label="Add subject" />
+            <AddButton onClick={() => addSubjectFocused(addSubject)} label="Add subject" />
           </div>
-          <div className="space-y-2 p-4">
+          <div ref={subjectsRef} className="space-y-2 p-4">
             {project.subjects.length === 0 ? (
               <EmptyRow
                 message="No subjects yet."
-                action={<AddButton onClick={addSubject} label="Add subject" />}
+                action={<AddButton onClick={() => addSubjectFocused(addSubject)} label="Add subject" />}
               />
             ) : (
               project.subjects.map((s) => (
@@ -55,6 +62,7 @@ export function StepSubjects() {
                   className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2"
                 >
                   <Input
+                    data-row-input
                     value={s.name}
                     onChange={(e) =>
                       updateSubject(s.id, { name: e.target.value })
@@ -81,13 +89,13 @@ export function StepSubjects() {
                 {project.activityTags.length} tag(s) · optional
               </p>
             </div>
-            <AddButton onClick={addTag} label="Add tag" />
+            <AddButton onClick={() => addTagFocused(addTag)} label="Add tag" />
           </div>
-          <div className="space-y-2 p-4">
+          <div ref={tagsRef} className="space-y-2 p-4">
             {project.activityTags.length === 0 ? (
               <EmptyRow
                 message="No tags yet. Common tags: Theory, Lab, Tutorial, Seminar."
-                action={<AddButton onClick={addTag} label="Add tag" />}
+                action={<AddButton onClick={() => addTagFocused(addTag)} label="Add tag" />}
               />
             ) : (
               project.activityTags.map((t) => (
@@ -96,6 +104,7 @@ export function StepSubjects() {
                   className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2"
                 >
                   <Input
+                    data-row-input
                     value={t.name}
                     onChange={(e) =>
                       updateTag(t.id, { name: e.target.value })

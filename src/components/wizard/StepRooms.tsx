@@ -11,12 +11,15 @@ import {
 } from "./shared";
 import { Input, Switch, Label } from "@/components/ui";
 import { DoorOpen } from "lucide-react";
+import { useFocusOnAdd } from "./useFocusOnAdd";
 
 export function StepRooms() {
   const project = useProjectStore((s) => s.project)!;
   const addRoom = useProjectStore((s) => s.addRoom);
   const updateRoom = useProjectStore((s) => s.updateRoom);
   const removeRoom = useProjectStore((s) => s.removeRoom);
+
+  const { containerRef, handleAdd } = useFocusOnAdd(project.rooms.length);
 
   const realRooms = project.rooms.filter((r) => !r.virtual);
 
@@ -36,13 +39,13 @@ export function StepRooms() {
               {realRooms.length} real room(s)
             </p>
           </div>
-          <AddButton onClick={addRoom} label="Add room" />
+          <AddButton onClick={() => handleAdd(addRoom)} label="Add room" />
         </div>
-        <div className="space-y-2 p-4">
+        <div ref={containerRef} className="space-y-2 p-4">
           {project.rooms.length === 0 ? (
             <EmptyRow
               message="No rooms yet. Add classrooms, labs, lecture halls…"
-              action={<AddButton onClick={addRoom} label="Add room" />}
+              action={<AddButton onClick={() => handleAdd(addRoom)} label="Add room" />}
             />
           ) : (
             <>
@@ -60,6 +63,7 @@ export function StepRooms() {
                   className="grid gap-2 rounded-lg border border-border bg-background p-2.5 sm:grid-cols-[1fr_140px_90px_100px_44px] sm:items-center"
                 >
                   <Input
+                    data-row-input
                     value={r.name}
                     onChange={(e) => updateRoom(r.id, { name: e.target.value })}
                     placeholder="e.g. Room 101 / Lab A"

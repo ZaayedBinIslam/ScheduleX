@@ -19,10 +19,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useFocusOnAdd } from "./useFocusOnAdd";
 
 export function StepStudents() {
   const project = useProjectStore((s) => s.project)!;
   const addYear = useProjectStore((s) => s.addYear);
+  const { containerRef, handleAdd } = useFocusOnAdd(project.students.length);
 
   const subgroupCount = project.students.reduce(
     (a, y) => a + y.groups.reduce((b, g) => b + g.subgroups.length, 0),
@@ -67,13 +69,13 @@ export function StepStudents() {
               {totalStudents} students
             </p>
           </div>
-          <AddButton onClick={addYear} label="Add year" />
+          <AddButton onClick={() => handleAdd(addYear)} label="Add year" />
         </div>
-        <div className="space-y-3 p-4">
+        <div ref={containerRef} className="space-y-3 p-4">
           {project.students.length === 0 ? (
             <EmptyRow
               message="No students yet. Adding a year also creates its first group and subgroup, ready to rename."
-              action={<AddButton onClick={addYear} label="Add year" />}
+              action={<AddButton onClick={() => handleAdd(addYear)} label="Add year" />}
             />
           ) : (
             project.students.map((y) => (
@@ -117,6 +119,7 @@ function YearCard({ yearId }: { yearId: string }) {
             Year name
           </label>
           <Input
+            data-row-input
             value={year.name}
             onChange={(e) => updateYear(yearId, { name: e.target.value })}
             placeholder="e.g. Year 1"

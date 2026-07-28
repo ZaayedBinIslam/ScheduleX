@@ -25,6 +25,23 @@ export interface HourConfig {
 export interface Teacher {
   id: string;
   name: string;
+  /** Short code, e.g. "AHM". Shown in compact views and exported to FET. */
+  code?: string;
+  /** Full display name when `name` is a short identifier like "T001". */
+  longName?: string;
+  /** Subject ids this teacher is qualified for; filters the activity pickers. */
+  subjects?: string[];
+  /** Weekly teaching target FET aims for; 0 or undefined means "no target". */
+  targetHours?: number;
+
+  // Scheduling preferences. These are emitted as the matching FET constraints
+  // at generation time, so common rules need no hand-built constraint. An
+  // explicit constraint of the same type for the same teacher wins.
+  maxHoursDaily?: number;
+  maxDaysPerWeek?: number;
+  maxGapsPerWeek?: number;
+  /** Slots the teacher cannot teach; the inverse of their preferred times. */
+  notAvailableTimes?: TimeSlot[];
 }
 
 export interface Subject {

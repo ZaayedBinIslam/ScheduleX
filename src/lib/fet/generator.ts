@@ -1,4 +1,4 @@
-import type { Project, TimeSlot } from "./types";
+import type { Project, TimeConstraintType, TimeSlot } from "./types";
 import { esc } from "./resolve";
 
 // Generate a .fet file (XML) from a project.
@@ -65,6 +65,24 @@ export function generateFetFile(project: Project): string {
   for (const t of p.teachers) {
     lines.push(`\t<Teacher>`);
     lines.push(`\t\t<Name>${esc(t.name)}</Name>`);
+    if (t.code) lines.push(`\t\t<Code>${esc(t.code)}</Code>`);
+    if (t.longName) lines.push(`\t\t<Long_Name>${esc(t.longName)}</Long_Name>`);
+    lines.push(
+      `\t\t<Target_Number_of_Hours>${t.targetHours ?? 0}</Target_Number_of_Hours>`
+    );
+    if (t.subjects?.length) {
+      lines.push(`\t\t<Qualified_Subjects>`);
+      for (const sid of t.subjects) {
+        const name = p.subjects.find((s) => s.id === sid)?.name;
+        if (name) {
+          lines.push(
+            `\t\t\t<Qualified_Subject>${esc(name)}</Qualified_Subject>`
+          );
+        }
+      }
+      lines.push(`\t\t</Qualified_Subjects>`);
+    }
+    lines.push(`\t\t<Comments></Comments>`);
     lines.push(`\t</Teacher>`);
   }
   lines.push(`</Teachers_List>`);
@@ -163,6 +181,59 @@ export function generateFetFile(project: Project): string {
   lines.push(`\t\t<Active>true</Active>`);
   lines.push(`\t\t<Comments></Comments>`);
   lines.push(`\t</ConstraintBasicCompulsoryTime>`);
+
+  // Constraints implied by a teacher's profile fields. An explicit constraint
+  // of the same kind for the same teacher takes precedence, so editing the
+  // Constraints step always overrides what the teacher card says.
+  const hasExplicit = (type: TimeConstraintType, teacherId: string) =>
+    p.timeConstraints.some(
+      (c) => c.active && c.type === type && c.teacherId === teacherId
+    );
+
+  for (const t of p.teachers) {
+    if (t.notAvailableTimes?.length && !hasExplicit("TeacherNotAvailable", t.id)) {
+      lines.push(`\t<ConstraintTeacherNotAvailableTimes>`);
+      lines.push(`\t\t<Weight_Percentage>100</Weight_Percentage>`);
+      lines.push(`\t\t<Teacher>${esc(t.name)}</Teacher>`);
+      lines.push(`\t\t<Number_of_Not_Available_Times>${t.notAvailableTimes.length}</Number_of_Not_Available_Times>`);
+      for (const s of t.notAvailableTimes) {
+        lines.push(`\t\t<Not_Available_Time>${naSlot(s)}</Not_Available_Time>`);
+      }
+      lines.push(`\t\t<Active>true</Active>`);
+      lines.push(`\t\t<Comments></Comments>`);
+      lines.push(`\t</ConstraintTeacherNotAvailableTimes>`);
+    }
+    if (t.maxHoursDaily && !hasExplicit("TeacherMaxHoursDaily", t.id)) {
+      lines.push(`\t<ConstraintTeacherMaxHoursDaily>`);
+      lines.push(`\t\t<Weight_Percentage>100</Weight_Percentage>`);
+      lines.push(`\t\t<Teacher_Name>${esc(t.name)}</Teacher_Name>`);
+      lines.push(`\t\t<Maximum_Hours_Daily>${t.maxHoursDaily}</Maximum_Hours_Daily>`);
+      lines.push(`\t\t<Active>true</Active>`);
+      lines.push(`\t\t<Comments></Comments>`);
+      lines.push(`\t</ConstraintTeacherMaxHoursDaily>`);
+    }
+    if (t.maxDaysPerWeek && !hasExplicit("TeacherMaxDaysPerWeek", t.id)) {
+      lines.push(`\t<ConstraintTeacherMaxDaysPerWeek>`);
+      lines.push(`\t\t<Weight_Percentage>100</Weight_Percentage>`);
+      lines.push(`\t\t<Teacher_Name>${esc(t.name)}</Teacher_Name>`);
+      lines.push(`\t\t<Max_Days_Per_Week>${t.maxDaysPerWeek}</Max_Days_Per_Week>`);
+      lines.push(`\t\t<Active>true</Active>`);
+      lines.push(`\t\t<Comments></Comments>`);
+      lines.push(`\t</ConstraintTeacherMaxDaysPerWeek>`);
+    }
+    if (
+      t.maxGapsPerWeek !== undefined &&
+      !hasExplicit("TeacherMaxGapsPerWeek", t.id)
+    ) {
+      lines.push(`\t<ConstraintTeacherMaxGapsPerWeek>`);
+      lines.push(`\t\t<Weight_Percentage>100</Weight_Percentage>`);
+      lines.push(`\t\t<Teacher_Name>${esc(t.name)}</Teacher_Name>`);
+      lines.push(`\t\t<Max_Gaps>${t.maxGapsPerWeek}</Max_Gaps>`);
+      lines.push(`\t\t<Active>true</Active>`);
+      lines.push(`\t\t<Comments></Comments>`);
+      lines.push(`\t</ConstraintTeacherMaxGapsPerWeek>`);
+    }
+  }
 
   for (const c of p.timeConstraints) {
     if (!c.active) continue;
