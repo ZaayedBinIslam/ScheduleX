@@ -640,6 +640,34 @@ function parseTimeConstraint(
         secondActivityId: secondId,
       };
     }
+    case "ConstraintTwoActivitiesGrouped": {
+      return {
+        ...base,
+        type: "TwoActivitiesGrouped",
+        firstActivityId: parseNumber(inner, "First_Activity_Id"),
+        secondActivityId: parseNumber(inner, "Second_Activity_Id"),
+      };
+    }
+    case "ConstraintStudentsSetMaxHoursContinuously": {
+      const sName = text(inner, "Students") ?? "";
+      return {
+        ...base,
+        type: "StudentsSetMaxHoursContinuously",
+        studentsSetId: ctx.studentNameToId.get(sName),
+        maxHours: parseNumber(inner, "Maximum_Hours_Continuously"),
+      };
+    }
+    case "ConstraintMaxDaysBetweenActivities": {
+      const ids = allText(inner, "Activity_Id")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !Number.isNaN(n));
+      return {
+        ...base,
+        type: "MaxNDaysBetweenActivities",
+        activityIds: ids,
+        maxNDays: parseNumber(inner, "MaxDays"),
+      };
+    }
     default:
       return null; // unsupported → counted as skipped by caller
   }
@@ -696,6 +724,16 @@ function parseSpaceConstraint(
         roomId: ctx.roomNameToId.get(rName),
       };
     }
+    case "ConstraintTeacherHomeRoom": {
+      const tName = text(inner, "Teacher") ?? text(inner, "Teacher_Name") ?? "";
+      const rName = text(inner, "Room") ?? "";
+      return {
+        ...base,
+        type: "TeacherPreferredRoom",
+        teacherId: ctx.teacherNameToId.get(tName),
+        roomId: ctx.roomNameToId.get(rName),
+      };
+    }
     case "ConstraintStudentsSetHomeRoom": {
       const sName = text(inner, "Students") ?? "";
       const rName = text(inner, "Room") ?? "";
@@ -704,15 +742,6 @@ function parseSpaceConstraint(
         type: "StudentsSetHomeRoom",
         studentsSetId: ctx.studentNameToId.get(sName),
         roomId: ctx.roomNameToId.get(rName),
-      };
-    }
-    case "ConstraintRoomMaxCapacity": {
-      const rName = text(inner, "Room") ?? "";
-      return {
-        ...base,
-        type: "RoomMaxCapacity",
-        roomId: ctx.roomNameToId.get(rName),
-        capacity: parseNumber(inner, "Capacity"),
       };
     }
     case "ConstraintActivityPreferredRooms": {

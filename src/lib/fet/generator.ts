@@ -258,6 +258,42 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t</ConstraintStudentsSetMaxHoursDaily>`);
         break;
       }
+      case "StudentsSetMaxHoursContinuously": {
+        lines.push(`\t<ConstraintStudentsSetMaxHoursContinuously>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Students>${esc(sName(c.studentsSetId))}</Students>`);
+        lines.push(`\t\t<Maximum_Hours_Continuously>${c.maxHours ?? 4}</Maximum_Hours_Continuously>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintStudentsSetMaxHoursContinuously>`);
+        break;
+      }
+      case "MaxNDaysBetweenActivities": {
+        if (!c.activityIds?.length) break;
+        // FET names this one without the N, unlike its Min counterpart.
+        lines.push(`\t<ConstraintMaxDaysBetweenActivities>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Number_of_Activities>${c.activityIds.length}</Number_of_Activities>`);
+        for (const id of c.activityIds) {
+          lines.push(`\t\t<Activity_Id>${id}</Activity_Id>`);
+        }
+        lines.push(`\t\t<MaxDays>${c.maxNDays ?? 1}</MaxDays>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintMaxDaysBetweenActivities>`);
+        break;
+      }
+      case "TwoActivitiesGrouped": {
+        if (!c.firstActivityId || !c.secondActivityId) break;
+        lines.push(`\t<ConstraintTwoActivitiesGrouped>`);
+        lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<First_Activity_Id>${c.firstActivityId}</First_Activity_Id>`);
+        lines.push(`\t\t<Second_Activity_Id>${c.secondActivityId}</Second_Activity_Id>`);
+        lines.push(`\t\t<Active>true</Active>`);
+        lines.push(`\t\t<Comments></Comments>`);
+        lines.push(`\t</ConstraintTwoActivitiesGrouped>`);
+        break;
+      }
       case "StudentsSetMinHoursDaily": {
         lines.push(`\t<ConstraintStudentsSetMinHoursDaily>`);
         lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
@@ -276,7 +312,6 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t\t<Activity_Id>${aid}</Activity_Id>`);
         lines.push(`\t\t<Preferred_Day>${esc(c.preferredStartingTime.day)}</Preferred_Day>`);
         lines.push(`\t\t<Preferred_Hour>${esc(c.preferredStartingTime.hour)}</Preferred_Hour>`);
-        lines.push(`\t\t<Permanently_Locked>true</Permanently_Locked>`);
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
         lines.push(`\t</ConstraintActivityPreferredStartingTime>`);
@@ -481,7 +516,6 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
         lines.push(`\t\t<Subject>${esc(sName(c.subjectId))}</Subject>`);
         lines.push(`\t\t<Room>${esc(rName(c.roomId))}</Room>`);
-        lines.push(`\t\t<Permanently_Locked>false</Permanently_Locked>`);
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
         lines.push(`\t</ConstraintSubjectPreferredRoom>`);
@@ -492,7 +526,6 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
         lines.push(`\t\t<Activity_Id>${c.activityId}</Activity_Id>`);
         lines.push(`\t\t<Room>${esc(rName(c.roomId))}</Room>`);
-        lines.push(`\t\t<Permanently_Locked>false</Permanently_Locked>`);
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
         lines.push(`\t</ConstraintActivityPreferredRoom>`);
@@ -508,14 +541,15 @@ export function generateFetFile(project: Project): string {
         lines.push(`\t</ConstraintStudentsSetHomeRoom>`);
         break;
       }
-      case "RoomMaxCapacity": {
-        lines.push(`\t<ConstraintRoomMaxCapacity>`);
+      case "TeacherPreferredRoom": {
+        // FET models "this teacher always teaches here" as a home room.
+        lines.push(`\t<ConstraintTeacherHomeRoom>`);
         lines.push(`\t\t<Weight_Percentage>${w}</Weight_Percentage>`);
+        lines.push(`\t\t<Teacher>${esc(tName(c.teacherId))}</Teacher>`);
         lines.push(`\t\t<Room>${esc(rName(c.roomId))}</Room>`);
-        lines.push(`\t\t<Capacity>${c.capacity}</Capacity>`);
         lines.push(`\t\t<Active>true</Active>`);
         lines.push(`\t\t<Comments></Comments>`);
-        lines.push(`\t</ConstraintRoomMaxCapacity>`);
+        lines.push(`\t</ConstraintTeacherHomeRoom>`);
         break;
       }
       case "ActivityPreferredRooms": {

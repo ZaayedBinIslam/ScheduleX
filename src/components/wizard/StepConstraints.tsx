@@ -24,38 +24,27 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
+  Search,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { studentSetName } from "@/lib/fet/resolve";
 import { uid } from "@/lib/fet/resolve";
+import {
+  TIME_CONSTRAINTS,
+  SPACE_CONSTRAINTS,
+  TIME_CONSTRAINT_TITLES,
+  SPACE_CONSTRAINT_TITLES,
+  newTimeConstraintDefaults,
+  newSpaceConstraintDefaults,
+  type ConstraintDef,
+} from "@/lib/fet/constraintCatalog";
 import type {
   SpaceConstraint,
   SpaceConstraintType,
   TimeConstraint,
   TimeConstraintType,
 } from "@/lib/fet/types";
-
-const TIME_TEMPLATES: { type: TimeConstraintType; label: string; hint: string }[] =
-  [
-    { type: "TeacherNotAvailable", label: "Teacher not available (times)", hint: "Block specific slots for a teacher" },
-    { type: "TeacherMaxDaysPerWeek", label: "Teacher max days/week", hint: "Limit how many days a teacher works" },
-    { type: "TeacherMaxHoursDaily", label: "Teacher max hours/day", hint: "Max teaching hours per day" },
-    { type: "TeacherMaxGapsPerWeek", label: "Teacher max gaps/week", hint: "Limit idle gaps between lessons" },
-    { type: "TeacherMinDaysPerWeek", label: "Teacher min days/week", hint: "Ensure a teacher spreads across days" },
-    { type: "StudentsSetNotAvailable", label: "Students not available (times)", hint: "Block slots for a student set" },
-    { type: "StudentsSetMaxHoursDaily", label: "Students max hours/day", hint: "Daily hour cap for a student set" },
-    { type: "ActivityPreferredStartingTime", label: "Activity preferred start", hint: "Lock an activity to a slot" },
-    { type: "MinNDaysBetweenActivities", label: "Min N days between activities", hint: "Spread split parts across days" },
-    { type: "ActivitiesSameStartingTime", label: "Activities same start", hint: "Two+ activities must start together" },
-  ];
-
-const SPACE_TEMPLATES: { type: SpaceConstraintType; label: string; hint: string }[] =
-  [
-    { type: "RoomNotAvailable", label: "Room not available (times)", hint: "Block a room at specific slots" },
-    { type: "SubjectPreferredRoom", label: "Subject preferred room", hint: "Subject should use a specific room" },
-    { type: "ActivityPreferredRoom", label: "Activity preferred room", hint: "Lock an activity to a room" },
-    { type: "StudentsSetHomeRoom", label: "Students home room", hint: "A student set always uses this room" },
-  ];
 
 export function StepConstraints() {
   const project = useProjectStore((s) => s.project)!;
@@ -65,47 +54,28 @@ export function StepConstraints() {
   const [showSpaceMenu, setShowSpaceMenu] = useState(false);
 
   const addTimeOfType = (type: TimeConstraintType) => {
-    const base: TimeConstraint = {
+    addTime({
       id: uid("tc_"),
       type,
       weight: 100,
       active: true,
-    };
-    if (type === "TeacherNotAvailable" || type === "StudentsSetNotAvailable") {
-      base.notAvailableTimes = [];
-    }
-    if (type === "ActivityPreferredStartingTime") {
-      base.preferredStartingTime = {
-        day: project.days[0]?.name ?? "",
-        hour: project.hours[0]?.name ?? "",
-      };
-      base.activityIds = [];
-    }
-    if (
-      type === "MinNDaysBetweenActivities" ||
-      type === "ActivitiesSameStartingTime"
-    ) {
-      base.activityIds = [];
-      if (type === "MinNDaysBetweenActivities") base.minNDays = 1;
-    }
-    if (type === "TeacherMaxDaysPerWeek") base.maxDays = 5;
-    if (type === "TeacherMaxHoursDaily" || type === "StudentsSetMaxHoursDaily")
-      base.maxHours = 6;
-    if (type === "TeacherMaxGapsPerWeek") base.maxGaps = 0;
-    if (type === "TeacherMinDaysPerWeek") base.minDays = 1;
-    addTime(base);
+      ...newTimeConstraintDefaults(
+        type,
+        project.days[0]?.name ?? "",
+        project.hours[0]?.name ?? ""
+      ),
+    } as TimeConstraint);
     setShowTimeMenu(false);
   };
 
   const addSpaceOfType = (type: SpaceConstraintType) => {
-    const base: SpaceConstraint = {
+    addSpace({
       id: uid("sc_"),
       type,
       weight: 100,
       active: true,
-    };
-    if (type === "RoomNotAvailable") base.notAvailableTimes = [];
-    addSpace(base);
+      ...newSpaceConstraintDefaults(type),
+    } as SpaceConstraint);
     setShowSpaceMenu(false);
   };
 
@@ -133,7 +103,7 @@ export function StepConstraints() {
             <AddMenu
               open={showTimeMenu}
               onOpenChange={setShowTimeMenu}
-              templates={TIME_TEMPLATES}
+              templates={TIME_CONSTRAINTS}
               onAdd={(t) => addTimeOfType(t as TimeConstraintType)}
               label="Add time constraint"
             />
@@ -164,7 +134,7 @@ export function StepConstraints() {
             <AddMenu
               open={showSpaceMenu}
               onOpenChange={setShowSpaceMenu}
-              templates={SPACE_TEMPLATES}
+              templates={SPACE_CONSTRAINTS}
               onAdd={(t) => addSpaceOfType(t as SpaceConstraintType)}
               label="Add space constraint"
             />
@@ -193,50 +163,136 @@ function AddMenu({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  templates: { type: string; label: string; hint: string }[];
+  templates: ConstraintDef<string>[];
   onAdd: (type: string) => void;
   label: string;
 }) {
-  const [localOpen, setLocalOpen] = useState(false);
-  const isOpen = open || localOpen;
+  const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const close = () => {
+    onOpenChange(false);
+    setQuery("");
+    setHighlight(0);
+  };
+
+  // Match on label, hint and category so "teacher", "gap" and "room" all work.
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return templates;
+    return templates.filter((t) =>
+      `${t.label} ${t.hint} ${t.category}`.toLowerCase().includes(q)
+    );
+  }, [templates, query]);
+
+  // Group for display while keeping `matches` a flat list, so arrow-key
+  // navigation can run over a single index space.
+  const groups = useMemo(() => {
+    const byCategory = new Map<string, { def: ConstraintDef<string>; index: number }[]>();
+    matches.forEach((def, index) => {
+      const list = byCategory.get(def.category) ?? [];
+      list.push({ def, index });
+      byCategory.set(def.category, list);
+    });
+    return [...byCategory.entries()];
+  }, [matches]);
+
+  const choose = (type: string) => {
+    onAdd(type);
+    close();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => Math.min(h + 1, matches.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter" && matches[highlight]) {
+      e.preventDefault();
+      choose(matches[highlight].type);
+    }
+  };
+
   return (
     <div className="relative">
       <button
         onClick={() => {
-          setLocalOpen((o) => !o);
-          onOpenChange(!isOpen);
+          const next = !open;
+          onOpenChange(next);
+          if (next) {
+            setQuery("");
+            setHighlight(0);
+            // Let the popover mount before focusing the search box.
+            requestAnimationFrame(() => searchRef.current?.focus());
+          }
         }}
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-accent"
       >
         <Plus className="h-3.5 w-3.5" />
         {label}
       </button>
-      {isOpen && (
+      {open && (
         <>
+          <div className="fixed inset-0 z-10" onClick={close} />
           <div
-            className="fixed inset-0 z-10"
-            onClick={() => {
-              setLocalOpen(false);
-              onOpenChange(false);
-            }}
-          />
-          <div className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
-            <ul className="max-h-80 overflow-y-auto py-1">
-              {templates.map((t) => (
-                <li key={t.type}>
-                  <button
-                    onClick={() => {
-                      onAdd(t.type);
-                      setLocalOpen(false);
-                      onOpenChange(false);
-                    }}
-                    className="block w-full px-3 py-2 text-left hover:bg-accent"
-                  >
-                    <div className="text-sm font-medium">{t.label}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {t.hint}
-                    </div>
-                  </button>
+            className="absolute right-0 z-20 mt-1 w-80 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+            onKeyDown={onKeyDown}
+          >
+            <div className="border-b border-border p-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setHighlight(0);
+                  }}
+                  placeholder={`Search ${templates.length} constraints…`}
+                  className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            <ul className="max-h-80 overflow-y-auto py-1" role="listbox">
+              {matches.length === 0 && (
+                <li className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  No constraint matches “{query}”.
+                </li>
+              )}
+              {groups.map(([category, items]) => (
+                <li key={category}>
+                  <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {category}
+                  </div>
+                  <ul>
+                    {items.map(({ def, index }) => (
+                      <li key={def.type}>
+                        <button
+                          role="option"
+                          aria-selected={index === highlight}
+                          onMouseEnter={() => setHighlight(index)}
+                          onClick={() => choose(def.type)}
+                          className={cn(
+                            "block w-full px-3 py-1.5 text-left",
+                            index === highlight ? "bg-accent" : "hover:bg-accent"
+                          )}
+                        >
+                          <div className="text-sm font-medium">{def.label}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {def.hint}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>
@@ -342,43 +398,13 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
     label: t.name || "(unnamed)",
   }));
 
-  const titleMap: Record<TimeConstraintType, string> = {
-    BasicCompulsory: "Basic compulsory",
-    TeacherNotAvailable: "Teacher not available",
-    TeacherMaxDaysPerWeek: "Teacher max days/week",
-    TeacherMaxHoursDaily: "Teacher max hours/day",
-    TeacherMaxGapsPerWeek: "Teacher max gaps/week",
-    TeacherMinDaysPerWeek: "Teacher min days/week",
-    TeacherMaxHoursContinuously: "Teacher max hours continuously",
-    StudentsSetNotAvailable: "Students not available",
-    StudentsSetMaxHoursDaily: "Students max hours/day",
-    StudentsSetMaxHoursContinuously: "Students max hours cont.",
-    StudentsSetMinHoursDaily: "Students min hours/day",
-    RoomNotAvailable: "Room not available",
-    ActivityPreferredTime: "Activity preferred time",
-    ActivityPreferredStartingTime: "Activity preferred start",
-    ActivitiesSameStartingTime: "Activities same start",
-    ActivitiesNotOverlapping: "Activities not overlapping",
-    MinNDaysBetweenActivities: "Min N days between",
-    MaxNDaysBetweenActivities: "Max N days between",
-    TwoActivitiesConsecutive: "Two activities consecutive",
-    TwoActivitiesGrouped: "Two activities grouped",
-    ActivityEndsStudentsDay: "Activity ends students' day",
-    BreakTimes: "Break times",
-    MinDaysBetweenActivities: "Min days between activities",
-    ActivityPreferredTimeSlots: "Activity preferred time slots",
-    ActivitiesPreferredTimeSlots: "Activities preferred time slots",
-    ActivitiesSameStartingHour: "Activities same starting hour",
-    MinGapsBetweenActivities: "Min gaps between activities",
-  };
-
   const setSlot = (slot: { day: string; hour: string } | undefined) => {
     update(c.id, { preferredStartingTime: slot });
   };
 
   return (
     <ConstraintShell
-      title={titleMap[c.type]}
+      title={TIME_CONSTRAINT_TITLES[c.type]}
       weight={c.weight}
       active={c.active}
       onWeight={(n) => update(c.id, { weight: n })}
@@ -430,7 +456,8 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
         </>
       )}
 
-      {c.type === "TeacherMaxHoursDaily" && (
+      {(c.type === "TeacherMaxHoursDaily" ||
+        c.type === "TeacherMaxHoursContinuously") && (
         <>
           <Field label="Teacher">
             <SingleSelect
@@ -440,9 +467,15 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
               placeholder="Select teacher"
             />
           </Field>
-          <Field label="Max hours per day">
+          <Field
+            label={
+              c.type === "TeacherMaxHoursDaily"
+                ? "Max hours per day"
+                : "Max hours in a row"
+            }
+          >
             <NumberInput
-              value={c.maxHours ?? 6}
+              value={c.maxHours ?? (c.type === "TeacherMaxHoursDaily" ? 6 : 4)}
               min={1}
               onChange={(v) => update(c.id, { maxHours: v })}
             />
@@ -491,7 +524,9 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
         </>
       )}
 
-      {c.type === "StudentsSetMaxHoursDaily" && (
+      {(c.type === "StudentsSetMaxHoursDaily" ||
+        c.type === "StudentsSetMaxHoursContinuously" ||
+        c.type === "StudentsSetMinHoursDaily") && (
         <>
           <Field label="Students">
             <SingleSelect
@@ -501,13 +536,31 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
               placeholder="Select student set"
             />
           </Field>
-          <Field label="Max hours per day">
-            <NumberInput
-              value={c.maxHours ?? 6}
-              min={1}
-              onChange={(v) => update(c.id, { maxHours: v })}
-            />
-          </Field>
+          {c.type === "StudentsSetMinHoursDaily" ? (
+            <Field label="Min hours per day">
+              <NumberInput
+                value={c.minHours ?? 1}
+                min={1}
+                onChange={(v) => update(c.id, { minHours: v })}
+              />
+            </Field>
+          ) : (
+            <Field
+              label={
+                c.type === "StudentsSetMaxHoursDaily"
+                  ? "Max hours per day"
+                  : "Max hours in a row"
+              }
+            >
+              <NumberInput
+                value={
+                  c.maxHours ?? (c.type === "StudentsSetMaxHoursDaily" ? 6 : 4)
+                }
+                min={1}
+                onChange={(v) => update(c.id, { maxHours: v })}
+              />
+            </Field>
+          )}
         </>
       )}
 
@@ -567,7 +620,9 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
       )}
 
       {(c.type === "MinNDaysBetweenActivities" ||
-        c.type === "ActivitiesSameStartingTime") && (
+        c.type === "MaxNDaysBetweenActivities" ||
+        c.type === "ActivitiesSameStartingTime" ||
+        c.type === "ActivitiesNotOverlapping") && (
         <>
           <Field label="Activities">
             <MultiSelect
@@ -588,7 +643,59 @@ function TimeConstraintCard({ c }: { c: TimeConstraint }) {
               />
             </Field>
           )}
+          {c.type === "MaxNDaysBetweenActivities" && (
+            <Field label="Max days between">
+              <NumberInput
+                value={c.maxNDays ?? 1}
+                min={1}
+                onChange={(v) => update(c.id, { maxNDays: v })}
+              />
+            </Field>
+          )}
         </>
+      )}
+
+      {(c.type === "TwoActivitiesConsecutive" ||
+        c.type === "TwoActivitiesGrouped") && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="First activity">
+            <SingleSelect
+              options={activityOptions}
+              value={String(c.firstActivityId ?? "")}
+              onChange={(v) =>
+                update(c.id, {
+                  firstActivityId: v ? parseInt(v, 10) : undefined,
+                })
+              }
+              placeholder="Select activity"
+            />
+          </Field>
+          <Field label="Second activity">
+            <SingleSelect
+              options={activityOptions}
+              value={String(c.secondActivityId ?? "")}
+              onChange={(v) =>
+                update(c.id, {
+                  secondActivityId: v ? parseInt(v, 10) : undefined,
+                })
+              }
+              placeholder="Select activity"
+            />
+          </Field>
+        </div>
+      )}
+
+      {c.type === "ActivityEndsStudentsDay" && (
+        <Field label="Activity">
+          <SingleSelect
+            options={activityOptions}
+            value={String(c.activityIds?.[0] ?? "")}
+            onChange={(v) =>
+              update(c.id, { activityIds: v ? [parseInt(v, 10)] : [] })
+            }
+            placeholder="Select activity"
+          />
+        </Field>
       )}
 
       {c.type === "BreakTimes" && (
@@ -752,6 +859,10 @@ function SpaceConstraintCard({ c }: { c: SpaceConstraint }) {
     value: r.id,
     label: r.name || "(unnamed)",
   }));
+  const teacherOptions = project.teachers.map((t) => ({
+    value: t.id,
+    label: t.name || "(unnamed)",
+  }));
   const subjectOptions = project.subjects.map((s) => ({
     value: s.id,
     label: s.name || "(unnamed)",
@@ -772,24 +883,9 @@ function SpaceConstraintCard({ c }: { c: SpaceConstraint }) {
     label: t.name || "(unnamed)",
   }));
 
-  const titleMap: Record<SpaceConstraintType, string> = {
-    BasicCompulsory: "Basic compulsory",
-    RoomNotAvailable: "Room not available",
-    SubjectPreferredRoom: "Subject preferred room",
-    SubjectPreferredRooms: "Subject preferred rooms",
-    TeacherPreferredRoom: "Teacher preferred room",
-    ActivityPreferredRoom: "Activity preferred room",
-    StudentsSetHomeRoom: "Students home room",
-    RoomMaxCapacity: "Room max capacity",
-    ActivityPreferredRooms: "Activity preferred rooms",
-    SubjectActivityTagPreferredRoom: "Subject & tag preferred room",
-    ActivitiesOccupyMaxDifferentRooms: "Activities max different rooms",
-    ActivitiesSameRoomIfConsecutive: "Activities same room if consecutive",
-  };
-
   return (
     <ConstraintShell
-      title={titleMap[c.type]}
+      title={SPACE_CONSTRAINT_TITLES[c.type]}
       weight={c.weight}
       active={c.active}
       onWeight={(n) => update(c.id, { weight: n })}
@@ -869,6 +965,27 @@ function SpaceConstraintCard({ c }: { c: SpaceConstraint }) {
               value={c.studentsSetId ?? ""}
               onChange={(v) => update(c.id, { studentsSetId: v })}
               placeholder="Select student set"
+            />
+          </Field>
+          <Field label="Home room">
+            <SingleSelect
+              options={roomOptions}
+              value={c.roomId ?? ""}
+              onChange={(v) => update(c.id, { roomId: v })}
+              placeholder="Select room"
+            />
+          </Field>
+        </>
+      )}
+
+      {c.type === "TeacherPreferredRoom" && (
+        <>
+          <Field label="Teacher">
+            <SingleSelect
+              options={teacherOptions}
+              value={c.teacherId ?? ""}
+              onChange={(v) => update(c.id, { teacherId: v })}
+              placeholder="Select teacher"
             />
           </Field>
           <Field label="Home room">

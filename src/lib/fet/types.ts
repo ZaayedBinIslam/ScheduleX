@@ -107,8 +107,6 @@ export type TimeConstraintType =
   | "StudentsSetMaxHoursDaily"
   | "StudentsSetMaxHoursContinuously"
   | "StudentsSetMinHoursDaily"
-  | "RoomNotAvailable"
-  | "ActivityPreferredTime"
   | "ActivityPreferredStartingTime"
   | "ActivitiesSameStartingTime"
   | "ActivitiesNotOverlapping"
@@ -170,7 +168,6 @@ export type SpaceConstraintType =
   | "TeacherPreferredRoom"
   | "ActivityPreferredRoom"
   | "StudentsSetHomeRoom"
-  | "RoomMaxCapacity"
   // New Space Constraints
   | "ActivityPreferredRooms"
   | "SubjectActivityTagPreferredRoom"
