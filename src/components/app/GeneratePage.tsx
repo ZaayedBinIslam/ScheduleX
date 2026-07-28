@@ -17,6 +17,7 @@ import {
   Cpu,
   Timer,
   Clock,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
@@ -118,6 +119,8 @@ export function GeneratePage() {
   }
 
   const issues = validationIssues ?? validateProject(project);
+  const lockedCount =
+    project.timetable?.entries.filter((e) => e.locked).length ?? 0;
 
   const finalDurationMs = result?.project.timetable?.durationMs ?? elapsedMs;
   const previousDurationMs = project.timetable?.durationMs;
@@ -269,6 +272,23 @@ export function GeneratePage() {
             value={timerValue}
           />
         </div>
+
+        {/* Locked activities carry over from the timetable editor, so say so
+            before the user starts a run they expect to be from scratch. */}
+        {lockedCount > 0 && phase !== "done" && (
+          <div className="mt-5 flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span>
+              <strong className="font-medium">
+                {lockedCount} locked{" "}
+                {lockedCount === 1 ? "activity" : "activities"}
+              </strong>{" "}
+              will keep their current day, hour and room. Everything else is
+              scheduled around them. Unlock them in the timetable editor to let
+              FET move them again.
+            </span>
+          </div>
+        )}
 
         {/* Options */}
         {phase !== "generating" && phase !== "done" && (

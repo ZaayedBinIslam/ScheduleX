@@ -131,6 +131,7 @@ export const SpaceConstraintSchema = z.object({
 });
 
 export const TimetableEntrySchema = z.object({
+  locked: z.boolean().optional(),
   activityId: z.number(),
   teacherIds: z.array(z.string()),
   subjectId: z.string(),

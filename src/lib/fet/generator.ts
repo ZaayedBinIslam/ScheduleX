@@ -235,6 +235,22 @@ export function generateFetFile(project: Project): string {
     }
   }
 
+  // Locked activities from the current timetable are pinned to the slot the
+  // user kept, at full weight, so a regeneration reshuffles everything else
+  // around them instead of starting from a blank sheet.
+  for (const e of p.timetable?.entries ?? []) {
+    if (!e.locked) continue;
+    if (!e.day || !e.hour) continue;
+    lines.push(`\t<ConstraintActivityPreferredStartingTime>`);
+    lines.push(`\t\t<Weight_Percentage>100</Weight_Percentage>`);
+    lines.push(`\t\t<Activity_Id>${e.activityId}</Activity_Id>`);
+    lines.push(`\t\t<Preferred_Day>${esc(e.day)}</Preferred_Day>`);
+    lines.push(`\t\t<Preferred_Hour>${esc(e.hour)}</Preferred_Hour>`);
+    lines.push(`\t\t<Active>true</Active>`);
+    lines.push(`\t\t<Comments></Comments>`);
+    lines.push(`\t</ConstraintActivityPreferredStartingTime>`);
+  }
+
   for (const c of p.timeConstraints) {
     if (!c.active) continue;
     const w = c.weight;
@@ -558,6 +574,19 @@ export function generateFetFile(project: Project): string {
   lines.push(`\t\t<Active>true</Active>`);
   lines.push(`\t\t<Comments></Comments>`);
   lines.push(`\t</ConstraintBasicCompulsorySpace>`);
+
+  // Keep locked activities in the room they were locked in, too - pinning only
+  // the time would let a regeneration move them to a different room.
+  for (const e of p.timetable?.entries ?? []) {
+    if (!e.locked || !e.room) continue;
+    lines.push(`\t<ConstraintActivityPreferredRoom>`);
+    lines.push(`\t\t<Weight_Percentage>100</Weight_Percentage>`);
+    lines.push(`\t\t<Activity_Id>${e.activityId}</Activity_Id>`);
+    lines.push(`\t\t<Room>${esc(e.room)}</Room>`);
+    lines.push(`\t\t<Active>true</Active>`);
+    lines.push(`\t\t<Comments></Comments>`);
+    lines.push(`\t</ConstraintActivityPreferredRoom>`);
+  }
 
   for (const c of p.spaceConstraints) {
     if (!c.active) continue;

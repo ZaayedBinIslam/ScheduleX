@@ -33,6 +33,8 @@ import {
   Download,
   X,
   Move,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
@@ -144,6 +146,7 @@ export function TimetablePage() {
   }
 
   const stats = occupancyStats(project, entries);
+  const lockedCount = entries.filter((e) => e.locked).length;
 
   const onMove = (entry: TimetableEntry, day: string, hour: string, room: string) => {
     const conflicts = findConflicts(
@@ -177,7 +180,7 @@ export function TimetablePage() {
   // Only applies if there are NO conflicts; otherwise toasts and reverts.
   const onDragEnd = (activeId: string, targetDay: string, targetHour: string) => {
     const dragged = entries.find((e) => e.activityId === Number(activeId));
-    if (!dragged) return;
+    if (!dragged || dragged.locked) return;
     // Don't drop onto itself.
     if (dragged.day === targetDay && dragged.hour === targetHour) return;
 
@@ -187,6 +190,14 @@ export function TimetablePage() {
     );
 
     if (target) {
+      if (target.locked) {
+        toast({
+          title: "That activity is locked",
+          description: `Unlock #${target.activityId} first to swap with it.`,
+          variant: "destructive",
+        });
+        return;
+      }
       // SWAP
       const conflicts = checkSwap(project, entries, dragged, target);
       if (conflicts.length) {
@@ -227,6 +238,24 @@ export function TimetablePage() {
         description: `#${dragged.activityId} → ${targetDay} ${targetHour}`,
       });
     }
+  };
+
+  const onToggleLock = (activityId: number) => {
+    if (!project.timetable) return;
+    useProjectStore.getState().setTimetable({
+      ...project.timetable,
+      entries: entries.map((e) =>
+        e.activityId === activityId ? { ...e, locked: !e.locked } : e
+      ),
+    });
+  };
+
+  const setAllLocks = (locked: boolean) => {
+    if (!project.timetable) return;
+    useProjectStore.getState().setTimetable({
+      ...project.timetable,
+      entries: entries.map((e) => ({ ...e, locked: locked || undefined })),
+    });
   };
 
   const onSave = async () => {
@@ -308,6 +337,11 @@ export function TimetablePage() {
             size="sm"
             onClick={() => navigate(`/project/${id}/generate`)}
             className="gap-1.5"
+            title={
+              lockedCount > 0
+                ? `${lockedCount} locked activit${lockedCount === 1 ? "y" : "ies"} will keep their slot`
+                : "Build a new timetable from scratch"
+            }
           >
             <Sparkles className="h-3.5 w-3.5" />
             Regenerate
@@ -390,12 +424,50 @@ export function TimetablePage() {
         </div>
       </div>
 
+      {/* Locks */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
+        <div className="flex items-center gap-2 text-sm">
+          <Lock className="h-4 w-4 text-primary" />
+          <span className="font-medium">
+            {lockedCount} of {entries.length} locked
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Locked activities keep their day, hour and room when you regenerate;
+            everything else is rescheduled around them.
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAllLocks(true)}
+            disabled={lockedCount === entries.length}
+            className="gap-1.5"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Lock all
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAllLocks(false)}
+            disabled={lockedCount === 0}
+            className="gap-1.5"
+          >
+            <LockOpen className="h-3.5 w-3.5" />
+            Unlock all
+          </Button>
+        </div>
+      </div>
+
       {/* Matrix */}
       {matrix && currentResource ? (
         <TimetableMatrix
           matrix={matrix}
           project={project}
+          allEntries={entries}
           onEdit={(e) => setEditing(e)}
+          onToggleLock={onToggleLock}
           onDragEnd={onDragEnd}
         />
       ) : (
@@ -474,12 +546,18 @@ function StatTile({
 function TimetableMatrix({
   matrix,
   project,
+  allEntries,
   onEdit,
+  onToggleLock,
   onDragEnd,
 }: {
   matrix: ReturnType<typeof buildMatrix>;
   project: Project;
+  /** Every entry, not just the filtered view: a clash can involve an
+      activity belonging to a different teacher, room or student set. */
+  allEntries: TimetableEntry[];
   onEdit: (e: TimetableEntry) => void;
+  onToggleLock: (activityId: number) => void;
   onDragEnd: (activeId: string, targetDay: string, targetHour: string) => void;
 }) {
   const { days, hours, starts, blocked, span, filtered } = matrix;
@@ -491,6 +569,42 @@ function TimetableMatrix({
   const activeEntry = activeId
     ? filtered.find((e) => String(e.activityId) === activeId) ?? null
     : null;
+
+  // While a card is held, work out which slots it could legally take so the
+  // grid can show them instead of making the user drop and find out.
+  const freeSlots = useMemo(() => {
+    if (!activeEntry) return null;
+    const ok = new Set<string>();
+    for (const d of days) {
+      for (let hi = 0; hi < hours.length; hi++) {
+        // A multi-hour activity must fit before the day ends.
+        if (hi + activeEntry.duration > hours.length) continue;
+        const h = hours[hi];
+        if (activeEntry.day === d && activeEntry.hour === h) continue;
+        const occupied = allEntries.some(
+          (e) =>
+            e.activityId !== activeEntry.activityId &&
+            e.day === d &&
+            e.hour === h
+        );
+        const conflicts = occupied
+          ? checkSwap(
+              project,
+              allEntries,
+              activeEntry,
+              allEntries.find(
+                (e) =>
+                  e.activityId !== activeEntry.activityId &&
+                  e.day === d &&
+                  e.hour === h
+              )!
+            )
+          : checkMove(project, allEntries, activeEntry, d, h);
+        if (conflicts.length === 0) ok.add(`${d}::${h}`);
+      }
+    }
+    return ok;
+  }, [activeEntry, days, hours, allEntries, project]);
 
   const handleDragStart = (e: DragStartEvent) => {
     setActiveId(String(e.active.id));
@@ -554,6 +668,7 @@ function TimetableMatrix({
                           day={d}
                           hour={h}
                           active={Boolean(activeId)}
+                          free={freeSlots?.has(`${d}::${h}`) ?? false}
                         />
                       </td>
                     );
@@ -580,7 +695,9 @@ function TimetableMatrix({
                             day={d}
                             hour={h}
                             isDragging={activeId === String(entry.activityId)}
+                            swapFree={freeSlots?.has(`${d}::${h}`) ?? false}
                             onClick={() => onEdit(entry)}
+                            onToggleLock={() => onToggleLock(entry.activityId)}
                           />
                         ))}
                       </div>
@@ -600,10 +717,11 @@ function TimetableMatrix({
         ) : null}
       </DragOverlay>
       {activeId && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Move className="h-3 w-3" />
-          Drag the activity onto an empty cell to move, or onto another
-          activity to swap. Conflicting drops are blocked.
+        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm border border-emerald-500 bg-emerald-500/25" />
+          Green slots take this activity without a clash — everything else is
+          blocked. Drop on an empty cell to move, or on another activity to
+          swap.
         </p>
       )}
     </DndContext>
@@ -615,10 +733,13 @@ function DropCell({
   day,
   hour,
   active,
+  free,
 }: {
   day: string;
   hour: string;
   active: boolean;
+  /** True when the held activity would land here without any conflict. */
+  free: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `drop::${day}::${hour}`,
@@ -629,11 +750,14 @@ function DropCell({
       style={{ height: ROW_HEIGHT - CELL_PADDING }}
       className={cn(
         "rounded-md border border-dashed transition-colors",
-        isOver
-          ? "border-primary bg-primary/10"
-          : active
-            ? "border-primary/40 bg-primary/5"
-            : "border-border/60"
+        isOver && free && "border-emerald-500 bg-emerald-500/25",
+        isOver && !free && "border-destructive bg-destructive/15",
+        !isOver &&
+          active &&
+          free &&
+          "border-emerald-500/70 bg-emerald-500/10",
+        !isOver && active && !free && "border-border/40 bg-muted/30",
+        !active && "border-border/60"
       )}
     />
   );
@@ -645,18 +769,24 @@ function DraggableActivityCell({
   day,
   hour,
   isDragging,
+  swapFree,
   onClick,
+  onToggleLock,
 }: {
   entry: TimetableEntry;
   day: string;
   hour: string;
   isDragging: boolean;
+  /** True when swapping the held activity with this one causes no conflict. */
+  swapFree: boolean;
   onClick: () => void;
+  onToggleLock: () => void;
 }) {
   const { setNodeRef: setDragRef, listeners, attributes, transform } =
-    useDraggable({ id: String(entry.activityId) });
+    useDraggable({ id: String(entry.activityId), disabled: entry.locked });
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `drop::${day}::${hour}`,
+    disabled: entry.locked,
   });
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
@@ -673,10 +803,17 @@ function DraggableActivityCell({
       className={cn(
         "min-h-0 flex-1 rounded-md transition-opacity",
         isDragging && "opacity-40",
-        isOver && "ring-2 ring-primary ring-offset-1"
+        isOver &&
+          (swapFree
+            ? "ring-2 ring-emerald-500 ring-offset-1"
+            : "ring-2 ring-destructive ring-offset-1")
       )}
     >
-      <ActivityCell entry={entry} onClick={onClick} />
+      <ActivityCell
+        entry={entry}
+        onClick={onClick}
+        onToggleLock={onToggleLock}
+      />
     </div>
   );
 }
@@ -684,9 +821,11 @@ function DraggableActivityCell({
 function ActivityCell({
   entry,
   onClick,
+  onToggleLock,
 }: {
   entry: TimetableEntry;
   onClick: () => void;
+  onToggleLock?: () => void;
 }) {
   const color = subjectColor(entry.subjectName);
   return (
@@ -700,7 +839,12 @@ function ActivityCell({
           onClick();
         }
       }}
-      className="group flex h-full w-full cursor-grab flex-col overflow-hidden rounded-md border-l-4 p-2 text-left transition-shadow hover:shadow-md active:cursor-grabbing"
+      className={cn(
+        "group flex h-full w-full flex-col overflow-hidden rounded-md border-l-4 p-2 text-left transition-shadow hover:shadow-md",
+        entry.locked
+          ? "cursor-pointer ring-1 ring-inset ring-primary/40"
+          : "cursor-grab active:cursor-grabbing"
+      )}
       style={{
         borderLeftColor: color,
         backgroundColor: `${color}14`,
@@ -710,9 +854,40 @@ function ActivityCell({
         <span className="text-xs font-semibold leading-tight">
           {entry.subjectName || "(no subject)"}
         </span>
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-60">
-          <Move className="h-3 w-3" />
-          <Pencil className="h-3 w-3" />
+        <div className="flex shrink-0 items-center gap-0.5">
+          {onToggleLock && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLock();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              title={
+                entry.locked
+                  ? "Locked — keeps this slot when regenerating. Click to unlock."
+                  : "Lock to this slot so regenerating keeps it here"
+              }
+              aria-label={entry.locked ? "Unlock activity" : "Lock activity"}
+              className={cn(
+                "rounded p-0.5 transition-opacity hover:bg-background/60",
+                entry.locked
+                  ? "text-primary opacity-100"
+                  : "opacity-0 group-hover:opacity-60"
+              )}
+            >
+              {entry.locked ? (
+                <Lock className="h-3 w-3" />
+              ) : (
+                <LockOpen className="h-3 w-3" />
+              )}
+            </button>
+          )}
+          {!entry.locked && (
+            <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-60">
+              <Move className="h-3 w-3" />
+              <Pencil className="h-3 w-3" />
+            </div>
+          )}
         </div>
       </div>
       {entry.teacherNames.length > 0 && (

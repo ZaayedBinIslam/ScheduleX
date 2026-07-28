@@ -213,7 +213,15 @@ export interface SpaceConstraint {
 // Generated timetable
 // ---------------------------------------------------------------------------
 
+/**
+ * One placed activity.
+ *
+ * `locked` pins the activity to this exact day/hour (and room, if it has one)
+ * when the timetable is regenerated: the generator emits it as a preferred
+ * starting time at full weight, so FET reschedules everything around it.
+ */
 export interface TimetableEntry {
+  locked?: boolean;
   activityId: number;
   teacherIds: string[];
   subjectId: string;
