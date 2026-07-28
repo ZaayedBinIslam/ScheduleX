@@ -66,7 +66,7 @@ export interface GenerateResult {
 
 export async function generateTimetable(
   id: string,
-  opts: { forceFallback?: boolean; binaryPath?: string } = {}
+  opts: { forceFallback?: boolean; binaryPath?: string; timeoutSeconds?: number } = {}
 ): Promise<GenerateResult> {
   const res = await fetch(`/api/projects/${id}/generate`, {
     method: "POST",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useProjectStore } from "@/lib/store";
 import { generateTimetable } from "@/lib/api";
 import { useState, useEffect } from "react";
@@ -15,6 +15,8 @@ import {
   Terminal,
   CalendarClock,
   Cpu,
+  Timer,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
@@ -27,6 +29,9 @@ type Phase = "idle" | "generating" | "done" | "error";
 export function GeneratePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialTimeout = parseInt(searchParams.get("timeout") || "5") || 5;
+
   const project = useProjectStore((s) => s.project);
   const save = useProjectStore((s) => s.save);
   const fetAvailable = useProjectStore((s) => s.fetAvailable);
@@ -39,6 +44,32 @@ export function GeneratePage() {
   const [log, setLog] = useState<string>("");
   const [forceFallback, setForceFallback] = useState(false);
   const [binaryPath, setBinaryPath] = useState("");
+  const [timeoutMinutes, setTimeoutMinutes] = useState<number>(initialTimeout);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (phase === "generating") {
+      const startTime = Date.now();
+      setElapsedMs(0);
+      interval = setInterval(() => {
+        setElapsedMs(Date.now() - startTime);
+      }, 100);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [phase]);
+
+  const formatMs = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    if (mins > 0) {
+      return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+    return `${(ms / 1000).toFixed(1)}s`;
+  };
 
   const run = async () => {
     if (!project || !id) return;
@@ -55,6 +86,7 @@ export function GeneratePage() {
       const res = await generateTimetable(id, {
         forceFallback: forceFallback,
         binaryPath: binaryPath.trim() || undefined,
+        timeoutSeconds: Math.max(1, timeoutMinutes || 5) * 60,
       });
       setResult(res);
       setLog(res.log);
@@ -89,6 +121,25 @@ export function GeneratePage() {
   }
 
   const issues = validationIssues ?? validateProject(project);
+
+  const finalDurationMs = result?.project.timetable?.durationMs ?? elapsedMs;
+  const previousDurationMs = project.timetable?.durationMs;
+
+  const timerLabel =
+    phase === "generating"
+      ? "Elapsed Time"
+      : phase === "done"
+        ? "Duration"
+        : "Estimated Time";
+
+  const timerValue =
+    phase === "generating"
+      ? formatMs(elapsedMs)
+      : phase === "done"
+        ? formatMs(finalDurationMs)
+        : previousDurationMs
+          ? `~${formatMs(previousDurationMs)} (prev)`
+          : "< 5.0s (heuristic)";
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -185,7 +236,7 @@ export function GeneratePage() {
         </div>
 
         {/* Engine info */}
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
           <InfoTile
             icon={<Cpu className="h-4 w-4" />}
             label="Engine"
@@ -209,11 +260,41 @@ export function GeneratePage() {
             label="Activities"
             value={String(project.activities.filter((a) => a.active).length)}
           />
+          <InfoTile
+            icon={
+              phase === "generating" ? (
+                <Timer className="h-4 w-4 text-primary" />
+              ) : (
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              )
+            }
+            label={timerLabel}
+            value={timerValue}
+          />
         </div>
 
         {/* Options */}
         {phase !== "generating" && phase !== "done" && (
-          <div className="mt-5 space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+          <div className="mt-5 space-y-3.5 rounded-lg border border-border bg-muted/30 p-4">
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <label className="text-sm font-medium text-foreground whitespace-nowrap">
+                Timeout (minutes):
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={timeoutMinutes}
+                onChange={(e) =>
+                  setTimeoutMinutes(Math.max(1, parseInt(e.target.value) || 1))
+                }
+                className="h-9 w-24 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              <span className="text-xs text-muted-foreground">
+                Maximum allowed execution time for the solver process (default: 5 mins)
+              </span>
+            </div>
+
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

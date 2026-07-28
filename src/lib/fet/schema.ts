@@ -142,6 +142,7 @@ export const TimetableSchema = z.object({
   generatedAt: z.string(),
   engine: z.enum(["fet", "fallback"]),
   fetVersion: z.string().optional(),
+  durationMs: z.number().optional(),
   entries: z.array(TimetableEntrySchema),
   unassigned: z.array(
     z.object({

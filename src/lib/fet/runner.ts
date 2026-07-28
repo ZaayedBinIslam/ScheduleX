@@ -109,6 +109,7 @@ export async function runGeneration(
   project: Project,
   opts: RunOptions = {}
 ): Promise<RunResult> {
+  const startTime = Date.now();
   const log: string[] = [];
   const warnings: string[] = [];
   log.push(`[${ts()}] Starting timetable generation for "${project.name}"`);
@@ -120,6 +121,9 @@ export async function runGeneration(
       log.push(`[${ts()}] Found FET binary: ${bin} (version ${version ?? "?"})`);
       try {
         const result = await runFetCli(bin, project, opts.timeoutSeconds ?? 120, log);
+        const durationMs = Date.now() - startTime;
+        result.timetable.durationMs = durationMs;
+        log.push(`[${ts()}] Generation completed in ${durationMs}ms`);
         return {
           timetable: result.timetable,
           usedEngine: "fet",
@@ -145,8 +149,10 @@ export async function runGeneration(
 
   // Fallback scheduler
   const tt = fallbackSchedule(project);
+  const durationMs = Date.now() - startTime;
+  tt.durationMs = durationMs;
   log.push(
-    `[${ts()}] Fallback scheduler placed ${tt.entries.length}/${project.activities.filter((a) => a.active).length} activities (${tt.unassigned.length} unassigned).`
+    `[${ts()}] Fallback scheduler placed ${tt.entries.length}/${project.activities.filter((a) => a.active).length} activities (${tt.unassigned.length} unassigned) in ${durationMs}ms.`
   );
   return {
     timetable: tt,

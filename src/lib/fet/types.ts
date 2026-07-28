@@ -219,6 +219,7 @@ export interface Timetable {
   generatedAt: string;
   engine: "fet" | "fallback";
   fetVersion?: string;
+  durationMs?: number;
   entries: TimetableEntry[];
   unassigned: Array<{ activityId: number; reason: string }>;
   warnings: string[];

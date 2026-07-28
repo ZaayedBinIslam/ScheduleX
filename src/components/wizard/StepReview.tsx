@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useProjectStore } from "@/lib/store";
 import { validateProject, projectStats, hasErrors } from "@/lib/fet/validate";
@@ -20,6 +21,7 @@ export function StepReview() {
   const fetAvailable = useProjectStore((s) => s.fetAvailable);
   const navigate = useNavigate();
   const { id } = useParams();
+  const [timeoutMinutes, setTimeoutMinutes] = useState(5);
 
   const issues = validateProject(project);
   const errors = issues.filter((i) => i.level === "error");
@@ -28,7 +30,7 @@ export function StepReview() {
 
   const onGenerate = async () => {
     await save();
-    navigate(`/project/${id}/generate`);
+    navigate(`/project/${id}/generate?timeout=${timeoutMinutes}`);
   };
 
   const ready = !hasErrors(issues) && stats.activities > 0;
@@ -114,6 +116,22 @@ export function StepReview() {
                 <span className="font-medium">
                   {fetAvailable ? "FET CLI" : "Fallback scheduler"}
                 </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Timeout limit</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={timeoutMinutes}
+                    onChange={(e) =>
+                      setTimeoutMinutes(Math.max(1, parseInt(e.target.value) || 1))
+                    }
+                    className="h-7 w-16 rounded border border-border bg-background px-2 text-right text-xs font-medium outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <span className="text-xs text-muted-foreground">min</span>
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Errors</span>

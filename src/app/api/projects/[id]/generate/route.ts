@@ -16,6 +16,10 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
   const forceFallback = Boolean(body?.forceFallback);
   const binaryPath = typeof body?.binaryPath === "string" ? body.binaryPath : undefined;
+  const timeoutSeconds =
+    typeof body?.timeoutSeconds === "number" && body.timeoutSeconds > 0
+      ? body.timeoutSeconds
+      : undefined;
 
   // Validate
   const issues = validateProject(project);
@@ -34,7 +38,11 @@ export async function POST(
   await setTimetable(id, null, "generating");
 
   try {
-    const result = await runGeneration(project, { forceFallback, binaryPath });
+    const result = await runGeneration(project, {
+      forceFallback,
+      binaryPath,
+      timeoutSeconds,
+    });
     const updated = await setTimetable(id, result.timetable, "generated");
     return NextResponse.json({
       project: updated,
