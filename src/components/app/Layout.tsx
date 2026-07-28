@@ -38,6 +38,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [dirty, project, saving, save]);
 
+  // Autosave shortly after the user stops editing. Every wizard field writes
+  // straight to the store, so without this a closed tab loses the work.
+  useEffect(() => {
+    if (!dirty || !project || saving) return;
+    const t = setTimeout(() => save(), 1200);
+    return () => clearTimeout(t);
+  }, [dirty, project, saving, save]);
+
+  // Backstop for the gap between the last edit and the autosave landing.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   const inProject = location.pathname.startsWith("/project/");
 
   return (
@@ -60,11 +79,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <span className="truncate font-medium max-w-[40vw]">
                 {project.name || "Untitled"}
               </span>
-              {dirty && (
-                <span className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                  unsaved
-                </span>
-              )}
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {saving ? "saving…" : dirty ? "unsaved" : "saved"}
+              </span>
             </>
           )}
 
@@ -76,6 +93,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   if (dirty && project && !saving) save();
                 }}
                 disabled={!dirty || saving}
+                title={
+                  dirty
+                    ? "Save now (⌘/Ctrl+S) — changes also save automatically"
+                    : "All changes saved"
+                }
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
                   dirty
@@ -85,10 +107,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               >
                 {saving ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
+                ) : dirty ? (
                   <Save className="h-3.5 w-3.5" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-                Save
+                {saving ? "Saving" : dirty ? "Save" : "Saved"}
               </button>
             )}
             <Link

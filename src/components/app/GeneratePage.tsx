@@ -26,6 +26,8 @@ import { validateProject } from "@/lib/fet/validate";
 
 type Phase = "idle" | "generating" | "done" | "error";
 
+const WARNING_PREVIEW = 8;
+
 export function GeneratePage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -46,19 +48,17 @@ export function GeneratePage() {
   const [binaryPath, setBinaryPath] = useState("");
   const [timeoutMinutes, setTimeoutMinutes] = useState<number>(initialTimeout);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [showAllWarnings, setShowAllWarnings] = useState(false);
 
+  // Tick the elapsed clock while a run is in flight. The counter is zeroed in
+  // run() rather than here, so this effect never sets state during render.
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (phase === "generating") {
-      const startTime = Date.now();
-      setElapsedMs(0);
-      interval = setInterval(() => {
-        setElapsedMs(Date.now() - startTime);
-      }, 100);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    if (phase !== "generating") return;
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      setElapsedMs(Date.now() - startTime);
+    }, 100);
+    return () => clearInterval(interval);
   }, [phase]);
 
   const formatMs = (ms: number) => {
@@ -78,6 +78,8 @@ export function GeneratePage() {
     setResult(null);
     setLog("");
     setValidationIssues(null);
+    setShowAllWarnings(false);
+    setElapsedMs(0);
 
     // Save first
     await save();
@@ -102,14 +104,9 @@ export function GeneratePage() {
     }
   };
 
-  // Auto-start generation when project is loaded.
-  // (run intentionally not in deps to avoid re-trigger loops)
-  useEffect(() => {
-    if (project && project.id === id && phase === "idle") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      run();
-    }
-  }, [project?.id, phase]);
+  // Generation deliberately does not auto-start. It used to, which meant the
+  // options below - including the time budget - were unreachable: the run was
+  // already under way by the time the page rendered.
 
   if (!project) {
     return (
@@ -277,10 +274,14 @@ export function GeneratePage() {
         {phase !== "generating" && phase !== "done" && (
           <div className="mt-5 space-y-3.5 rounded-lg border border-border bg-muted/30 p-4">
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-              <label className="text-sm font-medium text-foreground whitespace-nowrap">
-                Timeout (minutes):
+              <label
+                htmlFor="time-budget"
+                className="whitespace-nowrap text-sm font-medium text-foreground"
+              >
+                Time budget (minutes)
               </label>
               <input
+                id="time-budget"
                 type="number"
                 min={1}
                 max={120}
@@ -291,7 +292,8 @@ export function GeneratePage() {
                 className="h-9 w-24 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
               <span className="text-xs text-muted-foreground">
-                Maximum allowed execution time for the solver process (default: 5 mins)
+                How long FET may search. Harder timetables need longer; if the
+                budget runs out you still get the best result found so far.
               </span>
             </div>
 
@@ -349,18 +351,33 @@ export function GeneratePage() {
         </div>
       </div>
 
-      {/* Warnings */}
+      {/* Warnings — FET's own warnings.txt can run to hundreds of lines, so
+          only the first few are shown until the user asks for the rest. */}
       {result && result.warnings.length > 0 && (
         <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm dark:border-amber-700 dark:bg-amber-950">
           <div className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4" />
-            {result.warnings.length} warning(s)
+            {result.warnings.length}{" "}
+            {result.warnings.length === 1 ? "warning" : "warnings"}
           </div>
           <ul className="mt-2 space-y-1 text-amber-800 dark:text-amber-200">
-            {result.warnings.map((w, i) => (
+            {(showAllWarnings
+              ? result.warnings
+              : result.warnings.slice(0, WARNING_PREVIEW)
+            ).map((w, i) => (
               <li key={i}>• {w}</li>
             ))}
           </ul>
+          {result.warnings.length > WARNING_PREVIEW && (
+            <button
+              onClick={() => setShowAllWarnings((v) => !v)}
+              className="mt-2 text-xs font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
+            >
+              {showAllWarnings
+                ? "Show fewer"
+                : `Show all ${result.warnings.length} warnings`}
+            </button>
+          )}
         </div>
       )}
 

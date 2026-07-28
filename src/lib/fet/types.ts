@@ -246,9 +246,20 @@ export interface Project {
   updatedAt: string;
 }
 
+/** Wizard step an issue belongs to, so the UI can link straight to the fix. */
+export type ValidationStep =
+  | "institution"
+  | "grid"
+  | "teachers"
+  | "subjects"
+  | "students"
+  | "activities"
+  | "rooms";
+
 export interface ValidationIssue {
   level: "error" | "warning";
   message: string;
+  step?: ValidationStep;
 }
 
 export function newProject(name = "Untitled Project"): Project {

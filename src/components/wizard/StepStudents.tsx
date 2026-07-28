@@ -4,6 +4,7 @@ import { useProjectStore } from "@/lib/store";
 import {
   StepHeader,
   AddButton,
+  ConfirmDelete,
   DeleteButton,
   EmptyRow,
   NumberInput,
@@ -134,16 +135,10 @@ function YearCard({ yearId }: { yearId: string }) {
           >
             <Plus className="h-3 w-3" /> Group
           </button>
-          <DeleteButton
-            onClick={() => {
-              if (
-                confirm(
-                  `Delete "${year.name}" with its ${year.groups.length} group(s) and ${subgroupTotal} subgroup(s)? Activities using them will lose those students.`
-                )
-              ) {
-                removeYear(yearId);
-              }
-            }}
+          <ConfirmDelete
+            title={`Delete "${year.name || "this year"}"?`}
+            description={`This removes ${year.groups.length} group(s) and ${subgroupTotal} subgroup(s). Any activity using them will lose those students.`}
+            onConfirm={() => removeYear(yearId)}
             label="Remove year"
           />
         </div>
@@ -222,16 +217,10 @@ function GroupCard({ yearId, groupId }: { yearId: string; groupId: string }) {
           >
             <Plus className="h-3 w-3" /> Subgroup
           </button>
-          <DeleteButton
-            onClick={() => {
-              if (
-                confirm(
-                  `Delete "${group.name}" and its ${group.subgroups.length} subgroup(s)? Activities using them will lose those students.`
-                )
-              ) {
-                removeGroup(yearId, groupId);
-              }
-            }}
+          <ConfirmDelete
+            title={`Delete "${group.name || "this group"}"?`}
+            description={`This removes ${group.subgroups.length} subgroup(s). Any activity using them will lose those students.`}
+            onConfirm={() => removeGroup(yearId, groupId)}
             label="Remove group"
           />
         </div>
