@@ -44,7 +44,7 @@ export function StepInstitution() {
                 onChange={(e) =>
                   setInstitution(project.institution.name, e.target.value)
                 }
-                placeholder="e.g. Generated via UniTimetable"
+                placeholder="e.g. Generated via ScheduleX"
                 rows={2}
               />
             </Field>

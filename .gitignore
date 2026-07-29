@@ -55,17 +55,9 @@ server.log
 /db/*.db
 /db/*.db-journal
 
-# Downloadable build artifacts (regenerated from source)
-/download/*.zip
-/download/*.tar.gz
-
 # Local verification artifacts (screenshots, scripts)
 /verify*.png
 /verify*.sh
-
-# Runtime process files
-/.zscripts/dev.pid
-/.zscripts/*.log
 
 # Worklog (internal agent tracking, not source)
 /worklog.md

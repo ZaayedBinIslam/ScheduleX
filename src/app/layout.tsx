@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UniTimetable — FET-powered University Timetable Generator",
+  title: "ScheduleX — FET-powered University Timetable Generator",
   description:
     "Build conflict-free university timetables with the FET engine. Define teachers, subjects, rooms and constraints through a guided wizard, generate, then fine-tune by hand.",
   keywords: [
@@ -26,19 +26,19 @@ export const metadata: Metadata = {
     "React",
     "Next.js",
   ],
-  authors: [{ name: "UniTimetable" }],
+  authors: [{ name: "ScheduleX" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
   openGraph: {
-    title: "UniTimetable",
+    title: "ScheduleX",
     description: "FET-powered university timetable generator",
-    siteName: "UniTimetable",
+    siteName: "ScheduleX",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "UniTimetable",
+    title: "ScheduleX",
     description: "FET-powered university timetable generator",
   },
 };

@@ -70,7 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <CalendarClock className="h-4 w-4" />
             </span>
-            <span className="hidden sm:inline">UniTimetable</span>
+            <span className="hidden sm:inline">ScheduleX</span>
           </Link>
 
           {inProject && project && (
@@ -138,7 +138,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <CalendarClock className="h-3.5 w-3.5" />
             <span>
-              UniTimetable — powered by{" "}
+              ScheduleX — powered by{" "}
               <a
                 href="https://lalescu.ro/liviu/fet/"
                 target="_blank"

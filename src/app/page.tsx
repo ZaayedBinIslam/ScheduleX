@@ -14,7 +14,7 @@ const App = dynamic(
     loading: () => (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-muted-foreground">
         <CalendarClock className="h-8 w-8 animate-pulse text-primary" />
-        <p className="text-sm">Loading UniTimetable…</p>
+        <p className="text-sm">Loading ScheduleX…</p>
       </div>
     ),
   }
