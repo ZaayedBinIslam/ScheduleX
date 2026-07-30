@@ -51,7 +51,7 @@ prompt
 
 server.log
 
-# SQLite database (regenerated via `bun run db:push`)
+# SQLite database backup (pre-MongoDB migration)
 /db/*.db
 /db/*.db-journal
 
