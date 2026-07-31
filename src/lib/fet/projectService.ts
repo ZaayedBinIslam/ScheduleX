@@ -1,5 +1,14 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { Project, Timetable } from "./types";
+
+// Prisma throws P2025 when an update/delete targets a row that doesn't exist.
+// Anything else — a dropped connection, an unreachable cluster — must not be
+// reported to the caller as "not found", so we only swallow P2025 and rethrow
+// the rest. This matters more on MongoDB than it did on a local SQLite file.
+function isRecordNotFound(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025";
+}
 
 // Serialize/deserialize a Project to/from DB rows.
 type ProjectRow = {
@@ -93,8 +102,9 @@ export async function updateProject(
       },
     });
     return rowToProject(row);
-  } catch {
-    return null;
+  } catch (e) {
+    if (isRecordNotFound(e)) return null;
+    throw e;
   }
 }
 
@@ -102,8 +112,9 @@ export async function deleteProject(id: string): Promise<boolean> {
   try {
     await db.project.delete({ where: { id } });
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    if (isRecordNotFound(e)) return false;
+    throw e;
   }
 }
 
@@ -121,7 +132,8 @@ export async function setTimetable(
       },
     });
     return rowToProject(row);
-  } catch {
-    return null;
+  } catch (e) {
+    if (isRecordNotFound(e)) return null;
+    throw e;
   }
 }

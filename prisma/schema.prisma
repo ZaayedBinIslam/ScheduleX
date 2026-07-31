@@ -6,17 +6,16 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 
 
-// A timetable project. The full project configuration is stored as JSON in
-// `data` (SQLite cannot store arrays natively), and the last generated
-// timetable (if any) in `timetable`.
+// A timetable project. The full project configuration is stored as a JSON
+// string in `data`, and the last generated timetable (if any) in `timetable`.
 model Project {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   name      String
   data      String
   timetable String?

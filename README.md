@@ -12,7 +12,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![shadcn/ui](https://img.shields.io/badge/shadcn%2Fui-New_York-000000?logo=shadcnui&logoColor=white)](https://ui.shadcn.com)
 [![Bun](https://img.shields.io/badge/Bun-1.3+-FBF0DF?logo=bun&logoColor=000)](https://bun.sh)
-[![Prisma](https://img.shields.io/badge/Prisma-SQLite-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
+[![Prisma](https://img.shields.io/badge/Prisma-MongoDB-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
 [![FET](https://img.shields.io/badge/engine-FET_7.x-4B8BBE)](https://lalescu.ro/liviu/fet/)
 
 </div>
@@ -82,19 +82,30 @@ The app also probes a few common install locations (`C:\Program Files\FET`, `/us
 
 ---
 
-## 3. Configure the environment
+## 3. Provision a MongoDB database
 
-Create a `.env` in the project root:
+ScheduleX stores projects in MongoDB. Prisma uses transactions internally, so the server **must be a replica set** — a standalone `mongod` will fail at runtime.
+
+- **MongoDB Atlas (recommended).** The free M0 tier is a replica set out of the box and needs no local setup. Create a cluster, add a database user, allow your IP under Network Access, then copy the connection string.
+- **Local Docker.** Start `mongod --replSet rs0` and run `rs.initiate()` once to promote it to a single-node replica set.
+
+## 4. Configure the environment
+
+Copy [`.env.example`](.env.example) to `.env` and fill in your connection string:
+
+```bash
+cp .env.example .env
+```
 
 ```env
-DATABASE_URL=file:../db/custom.db
+DATABASE_URL="mongodb+srv://<user>:<password>@<cluster>.mongodb.net/schedulex?retryWrites=true&w=majority"
 # Optional — only if FET is not on your PATH
 # FET_BINARY_PATH=C:\Program Files\FET\fet-7.8.7\fet-cl.exe
 ```
 
-The SQLite path is resolved relative to `prisma/schema.prisma`, so `file:../db/custom.db` puts the database in `db/` at the repo root (already gitignored).
+The database name goes in the path segment (`/schedulex` above). `.env` is gitignored — keep credentials out of commits.
 
-## 4. Install dependencies and set up the database
+## 5. Install dependencies and set up the database
 
 ```bash
 bun install
@@ -104,9 +115,9 @@ bun install
 bun run db:push
 ```
 
-`db:push` creates the SQLite file and syncs the Prisma schema to it. Run it once on a fresh clone, and again whenever `prisma/schema.prisma` changes.
+`db:push` syncs the Prisma schema to MongoDB, creating the `Project` collection's indexes. Run it once on a fresh clone, and again whenever `prisma/schema.prisma` changes. MongoDB has no migration files — `prisma migrate` is not supported, so `db:push` is the only schema command.
 
-## 5. Run the dev server
+## 6. Run the dev server
 
 ```bash
 bun run dev
@@ -143,10 +154,9 @@ Previewing the production build before deploying is worth the extra step: the de
 | `bun run build` | Production standalone build |
 | `bun run start` | Serve the production build on :3000 |
 | `bun run lint` | ESLint over the project |
-| `bun run db:push` | Create/sync the SQLite schema (no migration files) |
+| `bun run db:push` | Sync the Prisma schema to MongoDB (no migration files) |
 | `bun run db:generate` | Regenerate the Prisma client |
-| `bun run db:migrate` | Create and apply a dev migration |
-| `bun run db:reset` | Drop and recreate the database ⚠️ destroys local data |
+| `bun run db:reset` | Drop the whole database and re-push the schema ⚠️ destroys all data, asks to confirm |
 
 ---
 
@@ -163,8 +173,10 @@ src/lib/fet/          The FET integration
   importer.ts           Read an existing .fet file into a project
 src/components/       UI (shadcn/ui + Tailwind)
 src/lib/store.ts      Zustand app state
-prisma/schema.prisma  Project storage (SQLite)
+prisma/schema.prisma  Project storage (MongoDB)
 scripts/              verify-fet-roundtrip.ts — end-to-end generate/parse check
+                      migrate-sqlite-to-mongo.ts — one-shot import from the old SQLite DB
+                      db-reset.ts — drop the database and re-push the schema
 docs/plans/           Archived implementation specs, named by the commit that shipped them
 ```
 
@@ -176,7 +188,9 @@ docs/plans/           Archived implementation specs, named by the commit that sh
 
 **Generation times out.** The solver runs with a time budget (default 300s) and is stopped by a watchdog after that plus a grace period. Hard-to-satisfy constraint sets need a longer budget — raise it in the generate dialog.
 
-**Prisma errors on startup.** You probably skipped `bun run db:push`, or `DATABASE_URL` points somewhere that doesn't exist.
+**Prisma errors on startup.** You probably skipped `bun run db:push`, or `DATABASE_URL` points somewhere that doesn't exist. If the error mentions transactions or replica sets, your MongoDB server is a standalone `mongod` — see [step 3](#3-provision-a-mongodb-database).
+
+**Connection timeouts against Atlas.** Your current IP probably isn't allowed. Add it under Network Access in the Atlas console.
 
 ---
 
