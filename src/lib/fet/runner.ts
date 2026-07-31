@@ -14,6 +14,20 @@ export interface RunOptions {
   timeoutSeconds?: number;
   /** Force the fallback scheduler (skip fet-cli). */
   forceFallback?: boolean;
+  /** Aborting this stops the solver and rejects with {@link GenerationCancelledError}. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Thrown when a run is stopped on purpose — the user pressed stop, or the client
+ * disconnected. Callers use it to tell a cancellation apart from a real failure,
+ * which must not be reported to the user as an error.
+ */
+export class GenerationCancelledError extends Error {
+  constructor(message = "Generation was stopped.") {
+    super(message);
+    this.name = "GenerationCancelledError";
+  }
 }
 
 /**
@@ -71,7 +85,8 @@ function windowsFetCandidates(): string[] {
 
 // Detect whether the fet CLI binary is available and return its path.
 export async function detectFetBinary(
-  explicit?: string
+  explicit?: string,
+  signal?: AbortSignal
 ): Promise<{ path: string | null; version: string | null }> {
   let candidates: string[] = [];
 
@@ -98,11 +113,14 @@ export async function detectFetBinary(
   }
 
   for (const bin of candidates) {
+    // Probing every candidate can take a while, and the per-probe catch below
+    // would otherwise swallow the abort and keep going through the list.
+    throwIfCancelled(signal);
     const probeArgs = [["--version"], ["--help"], ["-v"]];
     let detected: { path: string; version: string | null } | null = null;
     for (const args of probeArgs) {
       try {
-        const { stdout, stderr } = await run(bin, args, 8);
+        const { stdout, stderr } = await run(bin, args, 8, signal);
         const out = `${stdout}\n${stderr}`.trim();
         const vMatch = out.match(/(\d+\.\d+\.\d+)/);
         // Require output to contain /fet/i or a version number (remove --version catch-all)
@@ -129,9 +147,14 @@ export async function runGeneration(
   const warnings: string[] = [];
   log.push(`[${ts()}] Starting timetable generation for "${project.name}"`);
 
+  throwIfCancelled(opts.signal);
+
   // Try the real FET binary first.
   if (!opts.forceFallback) {
-    const { path: bin, version } = await detectFetBinary(opts.binaryPath);
+    const { path: bin, version } = await detectFetBinary(
+      opts.binaryPath,
+      opts.signal
+    );
     if (bin) {
       log.push(`[${ts()}] Found FET binary: ${bin} (version ${version ?? "?"})`);
       try {
@@ -139,7 +162,8 @@ export async function runGeneration(
           bin,
           project,
           opts.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
-          log
+          log,
+          opts.signal
         );
         const durationMs = Date.now() - startTime;
         result.timetable.durationMs = durationMs;
@@ -152,6 +176,9 @@ export async function runGeneration(
           log: log.join("\n"),
         };
       } catch (e) {
+        // A stop is not a failure to recover from: falling back here would hand
+        // the user a fallback timetable they explicitly asked us not to compute.
+        if (e instanceof GenerationCancelledError) throw e;
         const errMsg = (e as Error).message;
         log.push(
           `[${ts()}] FET run failed: ${errMsg}. Falling back to internal scheduler.`
@@ -167,7 +194,9 @@ export async function runGeneration(
     }
   }
 
-  // Fallback scheduler
+  // Fallback scheduler. It runs synchronously, so this is the last point at
+  // which a stop can take effect before it produces a timetable.
+  throwIfCancelled(opts.signal);
   const tt = fallbackSchedule(project);
   const durationMs = Date.now() - startTime;
   tt.durationMs = durationMs;
@@ -186,7 +215,8 @@ async function runFetCli(
   bin: string,
   project: Project,
   timeoutSeconds: number,
-  log: string[]
+  log: string[],
+  signal?: AbortSignal
 ): Promise<{ timetable: Timetable; warnings: string[] }> {
   const workDir = mkdtempSync(join(tmpdir(), "fet-"));
   const inputFile = join(workDir, "input.fet");
@@ -215,7 +245,8 @@ async function runFetCli(
     const { stdout, stderr } = await run(
       bin,
       args,
-      solverSeconds + WATCHDOG_GRACE_SECONDS
+      solverSeconds + WATCHDOG_GRACE_SECONDS,
+      signal
     );
     const combined = `${stdout}\n${stderr}`;
     log.push(`[${ts()}] FET finished. Output length: ${combined.length} bytes`);
@@ -289,8 +320,17 @@ async function runFetCli(
   }
 }
 
-function run(bin: string, args: string[], timeoutSeconds: number) {
+function run(
+  bin: string,
+  args: string[],
+  timeoutSeconds: number,
+  signal?: AbortSignal
+) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new GenerationCancelledError());
+      return;
+    }
     const isWindows = process.platform === "win32";
     // On Windows, if bin ends with .bat or .cmd we use shell: true.
     // Otherwise, spawn directly with shell: false so arguments with spaces (like tmpdir paths)
@@ -307,12 +347,10 @@ function run(bin: string, args: string[], timeoutSeconds: number) {
     let stdout = "";
     let stderr = "";
     let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      // SIGTERM asks fet-cl to write its timetable and exit; on Windows Node has
-      // no real signals and terminates the process outright. Either way we are
-      // past the solver's own limit, so this only fires on a wedged process.
+
+    // SIGTERM asks fet-cl to write its timetable and exit; on Windows Node has
+    // no real signals and terminates the process outright.
+    const terminate = () => {
       try {
         child.kill("SIGTERM");
       } catch {
@@ -327,33 +365,65 @@ function run(bin: string, args: string[], timeoutSeconds: number) {
           }
         }, 5000).unref?.();
       }
-      reject(
-        new Error(
-          `FET did not exit ${timeoutSeconds}s after starting and was stopped.`
-        )
-      );
+    };
+
+    // Declared up front because finish() below clears the watchdog it holds.
+    let timer: ReturnType<typeof setTimeout>;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      fn();
+    };
+
+    // The user pressed stop, or the client went away. Kill the solver rather
+    // than leaving it to burn CPU on a result nobody will read.
+    const onAbort = () => {
+      finish(() => {
+        terminate();
+        reject(new GenerationCancelledError());
+      });
+    };
+
+    timer = setTimeout(() => {
+      finish(() => {
+        // Past the solver's own limit already, so this only fires on a wedged
+        // process.
+        terminate();
+        reject(
+          new Error(
+            `FET did not exit ${timeoutSeconds}s after starting and was stopped.`
+          )
+        );
+      });
     }, timeoutSeconds * 1000);
+
+    signal?.addEventListener("abort", onAbort, { once: true });
 
     child.stdout.on("data", (d) => (stdout += d.toString()));
     child.stderr.on("data", (d) => (stderr += d.toString()));
     child.on("error", (e) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(e);
+      finish(() => reject(e));
     });
     child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (code === 0 || code === 1) {
-        // FET sometimes returns 1 even on success
-        resolve({ stdout, stderr });
-      } else {
-        reject(new Error(`Process exited with code ${code}. ${stderr.slice(0, 500)}`));
-      }
+      finish(() => {
+        if (code === 0 || code === 1) {
+          // FET sometimes returns 1 even on success
+          resolve({ stdout, stderr });
+        } else {
+          reject(
+            new Error(`Process exited with code ${code}. ${stderr.slice(0, 500)}`)
+          );
+        }
+      });
     });
   });
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new GenerationCancelledError();
 }
 
 function ts(): string {
