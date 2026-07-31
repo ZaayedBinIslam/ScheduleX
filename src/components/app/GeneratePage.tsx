@@ -3,6 +3,7 @@
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useProjectStore } from "@/lib/store";
 import { generateTimetable } from "@/lib/api";
+import { ProjectLoadState } from "@/components/app/ProjectLoadState";
 import { useState, useEffect } from "react";
 import {
   Sparkles,
@@ -110,12 +111,7 @@ export function GeneratePage() {
   // already under way by the time the page rendered.
 
   if (!project) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Loading project…
-      </div>
-    );
+    return <ProjectLoadState />;
   }
 
   const issues = validationIssues ?? validateProject(project);

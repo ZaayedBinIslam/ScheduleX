@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   ClipboardCheck,
   Download,
-  Loader2,
   Sparkles,
   CalendarClock,
 } from "lucide-react";
@@ -31,6 +30,7 @@ import { StepActivities } from "@/components/wizard/StepActivities";
 import { StepRooms } from "@/components/wizard/StepRooms";
 import { StepConstraints } from "@/components/wizard/StepConstraints";
 import { StepReview } from "@/components/wizard/StepReview";
+import { ProjectLoadState } from "@/components/app/ProjectLoadState";
 
 const STEPS = [
   { n: 1, key: "institution", label: "Institution", icon: Building2 },
@@ -107,22 +107,14 @@ export function ProjectWorkspace() {
     STEPS.find((s) => s.key === key)?.n ?? 1;
 
   if (loading || !project) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Loading project…
-      </div>
-    );
+    return <ProjectLoadState />;
   }
 
   if (id && project.id !== id) {
-    // still loading the right project
-    return (
-      <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Syncing…
-      </div>
-    );
+    // Still loading the right project — or the load for it failed, in which
+    // case this would otherwise sit on "Syncing…" forever showing the
+    // previously-open project's data.
+    return <ProjectLoadState label="Syncing…" />;
   }
 
   const current = STEPS[step - 1];
