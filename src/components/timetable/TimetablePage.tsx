@@ -3,6 +3,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useProjectStore } from "@/lib/store";
 import { saveTimetable, exportProjectUrl } from "@/lib/api";
+import { ProjectLoadState } from "@/components/app/ProjectLoadState";
 import { useMemo, useState } from "react";
 import {
   DndContext,
@@ -118,12 +119,7 @@ export function TimetablePage() {
   }, [project, entries, view, currentResource]);
 
   if (!project) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center text-muted-foreground">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Loading…
-      </div>
-    );
+    return <ProjectLoadState label="Loading…" />;
   }
 
   if (!project.timetable || entries.length === 0) {
