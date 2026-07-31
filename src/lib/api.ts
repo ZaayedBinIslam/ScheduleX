@@ -64,17 +64,52 @@ export interface GenerateResult {
   issues: ValidationIssue[];
 }
 
+/**
+ * Rejection from {@link generateTimetable} when the run was stopped on purpose.
+ * Callers should return the UI to its idle state rather than report a failure.
+ */
+export class GenerationCancelledError extends Error {
+  constructor(message = "Generation was stopped.") {
+    super(message);
+    this.name = "GenerationCancelledError";
+  }
+}
+
 export async function generateTimetable(
   id: string,
-  opts: { forceFallback?: boolean; binaryPath?: string; timeoutSeconds?: number } = {}
+  opts: {
+    forceFallback?: boolean;
+    binaryPath?: string;
+    timeoutSeconds?: number;
+    /** Aborting this drops the request and stops the run server-side. */
+    signal?: AbortSignal;
+  } = {}
 ): Promise<GenerateResult> {
-  const res = await fetch(`/api/projects/${id}/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(opts),
-  });
+  const { signal, ...payload } = opts;
+  let res: Response;
+  try {
+    res = await fetch(`/api/projects/${id}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (e) {
+    // Aborting the request is how the stop button guarantees a result: the
+    // server sees req.signal fire and kills the solver, and this rejects at
+    // once instead of waiting on a response that is no longer coming.
+    if (signal?.aborted || (e as Error)?.name === "AbortError") {
+      throw new GenerationCancelledError();
+    }
+    throw e;
+  }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    if ((data as { cancelled?: boolean })?.cancelled) {
+      throw new GenerationCancelledError(
+        (data as { error?: string })?.error || undefined
+      );
+    }
     const err: Error & { issues?: ValidationIssue[] } = new Error(
       data?.error ?? `Generation failed (${res.status})`
     );
@@ -83,6 +118,21 @@ export async function generateTimetable(
   }
   const data = await res.json();
   return data as GenerateResult;
+}
+
+/**
+ * Ask the server to stop the run in progress for a project. Resolves to false
+ * when the server had no record of a run — either it had already finished, or
+ * the registry lost it across a dev reload.
+ *
+ * Best effort, and not the only line of defence: the caller also aborts the
+ * generation request itself, which stops the solver through the live handler
+ * rather than through shared server state.
+ */
+export async function stopGeneration(id: string): Promise<boolean> {
+  const res = await fetch(`/api/projects/${id}/generate`, { method: "DELETE" });
+  const data = await json<{ stopped: boolean }>(res);
+  return data.stopped;
 }
 
 export async function fetchFetStatus(): Promise<{

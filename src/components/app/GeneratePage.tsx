@@ -2,9 +2,13 @@
 
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useProjectStore } from "@/lib/store";
-import { generateTimetable } from "@/lib/api";
+import {
+  GenerationCancelledError,
+  generateTimetable,
+  stopGeneration,
+} from "@/lib/api";
 import { ProjectLoadState } from "@/components/app/ProjectLoadState";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   Loader2,
@@ -19,6 +23,8 @@ import {
   Timer,
   Clock,
   Lock,
+  Square,
+  Ban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
@@ -26,7 +32,7 @@ import type { GenerateResult } from "@/lib/api";
 import type { ValidationIssue } from "@/lib/fet/types";
 import { validateProject } from "@/lib/fet/validate";
 
-type Phase = "idle" | "generating" | "done" | "error";
+type Phase = "idle" | "generating" | "done" | "error" | "cancelled";
 
 const WARNING_PREVIEW = 8;
 
@@ -51,6 +57,9 @@ export function GeneratePage() {
   const [timeoutMinutes, setTimeoutMinutes] = useState<number>(initialTimeout);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [showAllWarnings, setShowAllWarnings] = useState(false);
+  // Briefly true between pressing stop and the request unwinding.
+  const [stopping, setStopping] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Tick the elapsed clock while a run is in flight. The counter is zeroed in
   // run() rather than here, so this effect never sets state during render.
@@ -82,15 +91,20 @@ export function GeneratePage() {
     setValidationIssues(null);
     setShowAllWarnings(false);
     setElapsedMs(0);
+    setStopping(false);
 
     // Save first
     await save();
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const res = await generateTimetable(id, {
         forceFallback: forceFallback,
         binaryPath: binaryPath.trim() || undefined,
         timeoutSeconds: Math.max(1, timeoutMinutes || 5) * 60,
+        signal: controller.signal,
       });
       setResult(res);
       setLog(res.log);
@@ -99,11 +113,39 @@ export function GeneratePage() {
       // Reload the project into the global store so the new timetable is available
       useProjectStore.getState().load(id);
     } catch (e) {
+      if (e instanceof GenerationCancelledError) {
+        // Stopping is something the user asked for, not a failure.
+        setPhase("cancelled");
+        useProjectStore.getState().load(id);
+        return;
+      }
       const err = e as Error & { issues?: ValidationIssue[] };
       setError(err.message);
       if (err.issues) setValidationIssues(err.issues);
       setPhase("error");
+    } finally {
+      abortRef.current = null;
+      setStopping(false);
     }
+  };
+
+  const stop = () => {
+    if (!id || stopping) return;
+    setStopping(true);
+
+    // Abort first. This is what actually ends the run for the user: it rejects
+    // the in-flight request immediately, and the server sees req.signal fire on
+    // the handler that owns the solver. Nothing here depends on the server
+    // still being able to find the run in a lookup table.
+    abortRef.current?.abort();
+
+    // Then tell the server explicitly, so it can kill the child process even if
+    // the disconnect alone would not have, and reset a status left at
+    // "generating". Purely best effort — the UI has already moved on, so a
+    // failure here is not worth putting in front of the user.
+    stopGeneration(id).catch((e) => {
+      console.warn("stop request failed", e);
+    });
   };
 
   // Generation deliberately does not auto-start. It used to, which meant the
@@ -126,10 +168,12 @@ export function GeneratePage() {
       ? "Elapsed Time"
       : phase === "done"
         ? "Duration"
-        : "Estimated Time";
+        : phase === "cancelled"
+          ? "Stopped After"
+          : "Estimated Time";
 
   const timerValue =
-    phase === "generating"
+    phase === "generating" || phase === "cancelled"
       ? formatMs(elapsedMs)
       : phase === "done"
         ? formatMs(finalDurationMs)
@@ -157,7 +201,7 @@ export function GeneratePage() {
       </div>
 
       {/* Validation gate */}
-      {(phase === "idle" || phase === "error") &&
+      {(phase === "idle" || phase === "error" || phase === "cancelled") &&
         issues.filter((i) => i.level === "error").length > 0 && (
           <div className="mb-5 rounded-xl border border-destructive/40 bg-destructive/5 p-5">
             <div className="flex items-center gap-2 text-destructive">
@@ -196,7 +240,9 @@ export function GeneratePage() {
                 ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400"
                 : phase === "error"
                   ? "bg-destructive/10 text-destructive"
-                  : "bg-primary/10 text-primary"
+                  : phase === "cancelled"
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-primary/10 text-primary"
             )}
           >
             {phase === "generating" ? (
@@ -205,6 +251,8 @@ export function GeneratePage() {
               <CheckCircle2 className="h-6 w-6" />
             ) : phase === "error" ? (
               <AlertCircle className="h-6 w-6" />
+            ) : phase === "cancelled" ? (
+              <Ban className="h-6 w-6" />
             ) : (
               <Sparkles className="h-6 w-6" />
             )}
@@ -212,21 +260,29 @@ export function GeneratePage() {
           <div>
             <h2 className="font-semibold">
               {phase === "generating"
-                ? "Generating timetable…"
+                ? stopping
+                  ? "Stopping generation…"
+                  : "Generating timetable…"
                 : phase === "done"
                   ? "Timetable generated"
                   : phase === "error"
                     ? "Generation failed"
-                    : "Preparing to generate"}
+                    : phase === "cancelled"
+                      ? "Generation stopped"
+                      : "Preparing to generate"}
             </h2>
             <p className="text-sm text-muted-foreground">
               {phase === "generating"
-                ? "Running the FET engine. This can take a moment."
+                ? stopping
+                  ? "Shutting the FET engine down. This takes a second."
+                  : "Running the FET engine. This can take a moment."
                 : phase === "done"
                   ? `${result?.project.timetable?.entries.length ?? 0} activities scheduled.`
                   : phase === "error"
                     ? error
-                    : "Validating and saving project."}
+                    : phase === "cancelled"
+                      ? "No timetable was produced. Adjust the options below and start again."
+                      : "Validating and saving project."}
             </p>
           </div>
         </div>
@@ -336,6 +392,21 @@ export function GeneratePage() {
 
         {/* Actions */}
         <div className="mt-6 flex flex-wrap gap-2">
+          {phase === "generating" && (
+            <Button
+              variant="destructive"
+              onClick={stop}
+              disabled={stopping}
+              className="gap-1.5"
+            >
+              {stopping ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Square className="h-4 w-4 fill-current" />
+              )}
+              {stopping ? "Stopping…" : "Stop generation"}
+            </Button>
+          )}
           {phase === "done" && (
             <>
               <Button
@@ -357,11 +428,11 @@ export function GeneratePage() {
               Try again
             </Button>
           )}
-          {phase === "idle" &&
+          {(phase === "idle" || phase === "cancelled") &&
             issues.filter((i) => i.level === "error").length === 0 && (
               <Button onClick={run} className="gap-1.5">
                 <Sparkles className="h-4 w-4" />
-                Start generation
+                {phase === "cancelled" ? "Start again" : "Start generation"}
               </Button>
             )}
         </div>
