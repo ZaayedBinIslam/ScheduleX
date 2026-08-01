@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /**
  * Scroll to and focus a newly added list row.
@@ -18,19 +18,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 export function useFocusOnAdd(count: number) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const previousCount = useRef(count);
 
   const handleAdd = useCallback((add: () => void) => {
-    setPending(true);
+    pendingRef.current = true;
     add();
   }, []);
 
   useEffect(() => {
     const grew = count > previousCount.current;
     previousCount.current = count;
-    if (!pending || !grew) return;
-    setPending(false);
+    if (!pendingRef.current || !grew) return;
+    pendingRef.current = false;
 
     const rows = containerRef.current?.querySelectorAll<HTMLElement>(
       "[data-row-input]"
@@ -40,7 +40,7 @@ export function useFocusOnAdd(count: number) {
     last.scrollIntoView({ block: "center", behavior: "smooth" });
     last.focus({ preventScroll: true });
     if (last instanceof HTMLInputElement) last.select();
-  }, [count, pending]);
+  }, [count]);
 
   return { containerRef, handleAdd };
 }
