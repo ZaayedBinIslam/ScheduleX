@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import Script from "next/script";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -55,6 +56,38 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
+
+        {/* Botpress Chatbot Integration */}
+        <Script
+          src="https://cdn.botpress.cloud/webchat/v3.7/inject.js"
+          strategy="afterInteractive"
+        />
+        <Script id="botpress-init" strategy="afterInteractive">
+          {`
+            function initBotpress() {
+              if (window.botpress) {
+                window.botpress.init({
+                  "botId": "ee946fb0-f95b-4259-860d-5be974bb5851",
+                  "clientId": "91b54c61-f07d-4dc5-ac35-cee4345a0a64",
+                  "configuration": {
+                    "website": {},
+                    "email": {},
+                    "phone": {},
+                    "termsOfService": {},
+                    "privacyPolicy": {}
+                  }
+                });
+              } else {
+                setTimeout(initBotpress, 100);
+              }
+            }
+            if (document.readyState === 'complete') {
+              initBotpress();
+            } else {
+              window.addEventListener('load', initBotpress);
+            }
+          `}
+        </Script>
       </body>
     </html>
   );
