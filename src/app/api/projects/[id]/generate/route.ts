@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { getProject, setTimetable } from "@/lib/fet/projectService";
 import { GenerationCancelledError, runGeneration } from "@/lib/fet/runner";
 import { cancelRun, clearRun, registerRun } from "@/lib/fet/runRegistry";
@@ -15,6 +17,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
   const project = await getProject(id);
   if (!project) {
@@ -95,6 +101,10 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
   const stopped = cancelRun(id);
   if (stopped) {

@@ -12,8 +12,9 @@ datasource db {
 
 
 
-// A timetable project. The full project configuration is stored as a JSON
-// string in `data`, and the last generated timetable (if any) in `timetable`.
+// A timetable project. The full project configuration is stored as JSON in
+// `data` (SQLite cannot store arrays natively), and the last generated
+// timetable (if any) in `timetable`.
 model Project {
   id        String   @id @default(cuid()) @map("_id")
   name      String
@@ -24,4 +25,55 @@ model Project {
   updatedAt DateTime @updatedAt
 
   @@index([updatedAt])
+}
+
+model Account {
+  id                 String  @id @default(cuid()) @map("_id")
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid()) @map("_id")
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid()) @map("_id")
+  name          String?
+  email         String?   @unique
+  passwordHash  String?   // For Credentials provider
+  organization  String?   // User's university or organization
+  role          String?   // User's role (e.g. Scheduler, Faculty)
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model VerificationToken {
+  id         String   @id @default(cuid()) @map("_id")
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { createProject } from "@/lib/fet/projectService";
 import { parseFetFile } from "@/lib/fet/importer";
 import { type Project } from "@/lib/fet/types";
@@ -13,6 +15,10 @@ import { ProjectSchema } from "@/lib/fet/schema";
 //   - Content-Type: application/json → { "content": "<fet xml>", "name"?: "..." }
 //   - multipart/form-data with a `file` field
 export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     let content = "";
     let overrideName: string | undefined;

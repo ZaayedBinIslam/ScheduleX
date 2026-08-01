@@ -12,7 +12,9 @@ import {
   AlertTriangle,
   Wifi,
   WifiOff,
+  LogOut,
 } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useEffect } from "react";
 
@@ -122,6 +124,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Home className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Home</span>
             </Link>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-destructive hover:text-destructive-foreground transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Log Out</span>
+            </button>
           </div>
         </div>
         {error && (
