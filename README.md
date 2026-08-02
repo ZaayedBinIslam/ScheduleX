@@ -99,11 +99,21 @@ cp .env.example .env
 
 ```env
 DATABASE_URL="mongodb+srv://<user>:<password>@<cluster>.mongodb.net/schedulex?retryWrites=true&w=majority"
+NEXTAUTH_SECRET="<a random string>"
+NEXTAUTH_URL="http://localhost:3000"
 # Optional — only if FET is not on your PATH
 # FET_BINARY_PATH=C:\Program Files\FET\fet-7.8.7\fet-cl.exe
 ```
 
 The database name goes in the path segment (`/schedulex` above). `.env` is gitignored — keep credentials out of commits.
+
+`NEXTAUTH_SECRET` signs the session token and is **required**. Its absence fails in a confusing way rather than loudly: sign-in appears to succeed in the browser while every API call fails to decrypt the token and returns 401, and a production build refuses to start at all. Generate one with:
+
+```bash
+openssl rand -base64 32
+```
+
+Changing the secret later invalidates existing sessions, so everyone is signed out once. `NEXTAUTH_URL` must match how you actually reach the app, including scheme and port — it is what callback URLs are built from.
 
 ## 5. Install dependencies and set up the database
 
@@ -115,7 +125,7 @@ bun install
 bun run db:push
 ```
 
-`db:push` syncs the Prisma schema to MongoDB, creating the `Project` collection's indexes. Run it once on a fresh clone, and again whenever `prisma/schema.prisma` changes. MongoDB has no migration files — `prisma migrate` is not supported, so `db:push` is the only schema command.
+`db:push` syncs the Prisma schema to MongoDB, creating the indexes for the `Project` collection and for the `User` / `Account` / `Session` collections that authentication uses. Run it once on a fresh clone, and again whenever `prisma/schema.prisma` changes. MongoDB has no migration files — `prisma migrate` is not supported, so `db:push` is the only schema command.
 
 ## 6. Run the dev server
 
@@ -123,7 +133,13 @@ bun run db:push
 bun run dev
 ```
 
-Open <http://localhost:3000>. Output is mirrored to `dev.log`.
+Open <http://localhost:3000>.
+
+## 7. Create an account
+
+ScheduleX requires a sign-in. On first run you land on `/login` with no account yet — follow **Create one now** to `/register` and make one (passwords are a minimum of 8 characters).
+
+Projects are private to the account that created them: the dashboard lists only your own, and every project route is scoped by owner, so someone else's project id returns 404 rather than their data. Projects created before authentication existed have no owner and are visible to nobody — they are still in the database, and can be claimed by setting their `userId`.
 
 ---
 
@@ -163,7 +179,9 @@ Previewing the production build before deploying is worth the extra step: the de
 ## Project layout
 
 ```
-src/app/api/          Route handlers — projects CRUD, import/export, generate, fet-status
+src/app/api/          Route handlers — projects CRUD, import/export, generate, fet-status,
+                      auth (NextAuth handler + registration)
+src/lib/auth.ts       NextAuth options, credentials provider, session helper
 src/lib/fet/          The FET integration
   generator.ts          Project model  ->  .fet XML input file
   runner.ts             Binary detection + spawning fet-cl, watchdog, timeouts
@@ -173,7 +191,7 @@ src/lib/fet/          The FET integration
   importer.ts           Read an existing .fet file into a project
 src/components/       UI (shadcn/ui + Tailwind)
 src/lib/store.ts      Zustand app state
-prisma/schema.prisma  Project storage (MongoDB)
+prisma/schema.prisma  Project storage and the NextAuth user/session models (MongoDB)
 scripts/              verify-fet-roundtrip.ts — end-to-end generate/parse check
                       migrate-sqlite-to-mongo.ts — one-shot import from the old SQLite DB
                       db-reset.ts — drop the database and re-push the schema
@@ -189,6 +207,10 @@ docs/plans/           Archived implementation specs, named by the commit that sh
 **Generation times out.** The solver runs with a time budget (default 300s) and is stopped by a watchdog after that plus a grace period. Hard-to-satisfy constraint sets need a longer budget — raise it in the generate dialog.
 
 **Prisma errors on startup.** You probably skipped `bun run db:push`, or `DATABASE_URL` points somewhere that doesn't exist. If the error mentions transactions or replica sets, your MongoDB server is a standalone `mongod` — see [step 3](#3-provision-a-mongodb-database).
+
+**Sign-in "works" but the app stays empty and the console logs 401s.** `NEXTAUTH_SECRET` is missing or was changed. The server log shows `[next-auth][warn][NO_SECRET]` or `JWT_SESSION_ERROR: decryption operation failed`. Set it in `.env` (see [step 4](#4-configure-the-environment)), restart the dev server, then clear the stale session cookie for `localhost:3000` and sign in again.
+
+**Your projects disappeared after adding authentication.** Projects are scoped to their owner, and any created before sign-in existed have no `userId`, so nothing lists them. The documents are intact — set `userId` on them to the account that should own them.
 
 **Connection timeouts against Atlas.** Your current IP probably isn't allowed. Add it under Network Access in the Atlas console.
 
