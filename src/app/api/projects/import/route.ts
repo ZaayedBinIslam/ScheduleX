@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionUserId } from "@/lib/auth";
 import { createProject } from "@/lib/fet/projectService";
 import { parseFetFile } from "@/lib/fet/importer";
 import { type Project } from "@/lib/fet/types";
@@ -13,6 +14,10 @@ import { ProjectSchema } from "@/lib/fet/schema";
 //   - Content-Type: application/json → { "content": "<fet xml>", "name"?: "..." }
 //   - multipart/form-data with a `file` field
 export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     let content = "";
     let overrideName: string | undefined;
@@ -60,7 +65,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const saved = await createProject(parsed.data);
+    const saved = await createProject(parsed.data, userId);
     return NextResponse.json(
       { project: saved, warnings: result.warnings, stats: result.stats },
       { status: 201 }

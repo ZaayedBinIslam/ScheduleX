@@ -45,19 +45,31 @@ function rowToProject(row: ProjectRow): Project {
   };
 }
 
-export async function listProjects(): Promise<Project[]> {
+// Every function below takes the id of the signed-in user and scopes its query
+// by it. A project belonging to someone else is indistinguishable from one that
+// does not exist, so callers can keep returning a plain 404 without leaking
+// whether the id is real.
+
+export async function listProjects(userId: string): Promise<Project[]> {
   const rows = await db.project.findMany({
+    where: { userId },
     orderBy: { updatedAt: "desc" },
   });
   return rows.map(rowToProject);
 }
 
-export async function getProject(id: string): Promise<Project | null> {
-  const row = await db.project.findUnique({ where: { id } });
+export async function getProject(
+  id: string,
+  userId: string
+): Promise<Project | null> {
+  const row = await db.project.findFirst({ where: { id, userId } });
   return row ? rowToProject(row) : null;
 }
 
-export async function createProject(project: Project): Promise<Project> {
+export async function createProject(
+  project: Project,
+  userId: string
+): Promise<Project> {
   const {
     id: _id,
     timetable: _tt,
@@ -73,6 +85,7 @@ export async function createProject(project: Project): Promise<Project> {
       data: JSON.stringify(dataOnly),
       timetable: project.timetable ? JSON.stringify(project.timetable) : null,
       status: project.status,
+      userId,
     },
   });
   return rowToProject(row);
@@ -80,7 +93,8 @@ export async function createProject(project: Project): Promise<Project> {
 
 export async function updateProject(
   id: string,
-  project: Project
+  project: Project,
+  userId: string
 ): Promise<Project | null> {
   const {
     id: _id,
@@ -93,7 +107,7 @@ export async function updateProject(
   } = project;
   try {
     const row = await db.project.update({
-      where: { id },
+      where: { id, userId },
       data: {
         name: project.name,
         data: JSON.stringify(dataOnly),
@@ -108,9 +122,12 @@ export async function updateProject(
   }
 }
 
-export async function deleteProject(id: string): Promise<boolean> {
+export async function deleteProject(
+  id: string,
+  userId: string
+): Promise<boolean> {
   try {
-    await db.project.delete({ where: { id } });
+    await db.project.delete({ where: { id, userId } });
     return true;
   } catch (e) {
     if (isRecordNotFound(e)) return false;
@@ -121,11 +138,12 @@ export async function deleteProject(id: string): Promise<boolean> {
 export async function setTimetable(
   id: string,
   timetable: Timetable | null,
-  status: Project["status"]
+  status: Project["status"],
+  userId: string
 ): Promise<Project | null> {
   try {
     const row = await db.project.update({
-      where: { id },
+      where: { id, userId },
       data: {
         timetable: timetable ? JSON.stringify(timetable) : null,
         status,

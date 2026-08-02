@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionUserId } from "@/lib/auth";
 import { getProject, setTimetable } from "@/lib/fet/projectService";
 import { GenerationCancelledError, runGeneration } from "@/lib/fet/runner";
 import { cancelRun, clearRun, registerRun } from "@/lib/fet/runRegistry";
@@ -15,8 +16,12 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
-  const project = await getProject(id);
+  const project = await getProject(id, userId);
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
@@ -43,7 +48,7 @@ export async function POST(
   }
 
   // Mark generating
-  await setTimetable(id, null, "generating");
+  await setTimetable(id, null, "generating", userId);
 
   // Two independent ways in, because neither is reliable alone. req.signal fires
   // on this live handler when the client drops the request — that is what the
@@ -60,7 +65,7 @@ export async function POST(
       timeoutSeconds,
       signal: controller.signal,
     });
-    const updated = await setTimetable(id, result.timetable, "generated");
+    const updated = await setTimetable(id, result.timetable, "generated", userId);
     return NextResponse.json({
       project: updated,
       engine: result.usedEngine,
@@ -71,7 +76,7 @@ export async function POST(
     });
   } catch (e) {
     if (e instanceof GenerationCancelledError) {
-      await setTimetable(id, null, STATUS_AFTER_STOP);
+      await setTimetable(id, null, STATUS_AFTER_STOP, userId);
       // 499 is the usual "client closed request" code. The client may already be
       // gone, in which case this response is simply dropped.
       return NextResponse.json(
@@ -79,7 +84,7 @@ export async function POST(
         { status: 499 }
       );
     }
-    await setTimetable(id, null, "error");
+    await setTimetable(id, null, "error", userId);
     return NextResponse.json(
       { error: (e as Error).message },
       { status: 500 }
@@ -95,7 +100,20 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
+
+  // Confirm the caller owns this project before touching the run registry,
+  // which is keyed by project id alone and would otherwise let any signed-in
+  // user stop someone else's generation.
+  const project = await getProject(id, userId);
+  if (!project) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
   const stopped = cancelRun(id);
   if (stopped) {
     // The POST handler resets the status as it unwinds, so leave it alone here.
@@ -105,12 +123,8 @@ export async function DELETE(
   // Nothing was running. If the project still says "generating" the run died
   // with the server that owned it, so clear the flag rather than leaving the
   // project stuck in a state nothing can move it out of.
-  const project = await getProject(id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
-  }
   if (project.status === "generating") {
-    await setTimetable(id, null, STATUS_AFTER_STOP);
+    await setTimetable(id, null, STATUS_AFTER_STOP, userId);
   }
   return NextResponse.json({ stopped: false });
 }
