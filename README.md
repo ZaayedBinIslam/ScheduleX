@@ -179,23 +179,44 @@ Previewing the production build before deploying is worth the extra step: the de
 ## Project layout
 
 ```
-src/app/api/          Route handlers — projects CRUD, import/export, generate, fet-status,
-                      auth (NextAuth handler + registration)
-src/lib/auth.ts       NextAuth options, credentials provider, session helper
-src/lib/fet/          The FET integration
-  generator.ts          Project model  ->  .fet XML input file
-  runner.ts             Binary detection + spawning fet-cl, watchdog, timeouts
-  parser.ts             FET's activities.xml  ->  Timetable
-  scheduler.ts          Greedy fallback used when FET is unavailable
-  constraintCatalog.ts  Every constraint type the UI can add
-  importer.ts           Read an existing .fet file into a project
-src/components/       UI (shadcn/ui + Tailwind)
-src/lib/store.ts      Zustand app state
-prisma/schema.prisma  Project storage and the NextAuth user/session models (MongoDB)
-scripts/              verify-fet-roundtrip.ts — end-to-end generate/parse check
-                      migrate-sqlite-to-mongo.ts — one-shot import from the old SQLite DB
-                      db-reset.ts — drop the database and re-push the schema
-docs/plans/           Archived implementation specs, named by the commit that shipped them
+src/
+├── app/                         Next.js App Router
+│   ├── api/                     Route handlers
+│   │   ├── auth/[...nextauth]/  NextAuth handler — sign-in, session, sign-out
+│   │   ├── auth/register/       Account creation (zod-validated, bcrypt hashed)
+│   │   ├── projects/            CRUD, import/export, generate — all scoped by owner
+│   │   └── fet-status/          Whether fet-cl is resolvable, and its version
+│   ├── login/                   Sign-in page
+│   ├── register/                Registration page
+│   ├── layout.tsx               Root layout, wraps the app in SessionProvider
+│   └── page.tsx                 Entry point — redirects to /login when signed out
+├── components/                  UI (shadcn/ui + Tailwind)
+│   ├── app/                     Shell, dashboard, project workspace
+│   ├── wizard/                  The 9-step setup wizard
+│   ├── timetable/               Drag-and-drop timetable grid
+│   ├── providers/               Client-side context wrappers
+│   └── ui/                      shadcn/ui primitives
+├── lib/
+│   ├── auth.ts                  NextAuth options, credentials provider, session helper
+│   ├── db.ts                    Prisma client singleton
+│   ├── store.ts                 Zustand app state
+│   └── fet/                     The FET integration
+│       ├── generator.ts         Project model  ->  .fet XML input file
+│       ├── runner.ts            Binary detection + spawning fet-cl, watchdog, timeouts
+│       ├── parser.ts            FET's activities.xml  ->  Timetable
+│       ├── scheduler.ts         Greedy fallback used when FET is unavailable
+│       ├── importer.ts          Read an existing .fet file into a project
+│       ├── constraintCatalog.ts Every constraint type the UI can add
+│       ├── projectService.ts    Project persistence, scoped to the owning user
+│       └── validate.ts          Pre-flight checks surfaced before generation
+└── types/                       Ambient types (NextAuth session augmentation)
+
+prisma/schema.prisma             Project storage and the NextAuth user/session models
+scripts/
+├── verify-fet-roundtrip.ts      End-to-end generate/parse check
+├── migrate-sqlite-to-mongo.ts   One-shot import from the old SQLite DB
+└── db-reset.ts                  Drop the database and re-push the schema
+docs/plans/                      Archived implementation specs, named by the commit that shipped them
 ```
 
 ---
