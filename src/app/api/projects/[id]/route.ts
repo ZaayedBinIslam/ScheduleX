@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { getSessionUserId } from "@/lib/auth";
 import { deleteProject, getProject, updateProject } from "@/lib/fet/projectService";
 import { ProjectSchema } from "@/lib/fet/schema";
 
@@ -8,12 +7,12 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const userId = await getSessionUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  const project = await getProject(id);
+  const project = await getProject(id, userId);
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ project });
 }
@@ -22,8 +21,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const userId = await getSessionUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
@@ -42,7 +41,7 @@ export async function PUT(
 
   const project = parsed.data;
   project.id = id;
-  const updated = await updateProject(id, project);
+  const updated = await updateProject(id, project, userId);
   if (!updated)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ project: updated });
@@ -52,12 +51,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const userId = await getSessionUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  const ok = await deleteProject(id);
+  const ok = await deleteProject(id, userId);
   if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

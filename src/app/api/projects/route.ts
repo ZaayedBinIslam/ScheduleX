@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { getSessionUserId } from "@/lib/auth";
 import { createProject, listProjects } from "@/lib/fet/projectService";
 import { newProject, type Project } from "@/lib/fet/types";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const userId = await getSessionUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const projects = await listProjects();
+    const projects = await listProjects(userId);
     return NextResponse.json({ projects });
   } catch (e) {
     return NextResponse.json(
@@ -21,8 +20,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const userId = await getSessionUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
@@ -32,7 +31,7 @@ export async function POST(req: NextRequest) {
         ? body.name.trim()
         : "Untitled Project";
     const project: Project = newProject(name);
-    const saved = await createProject(project);
+    const saved = await createProject(project, userId);
     return NextResponse.json({ project: saved }, { status: 201 });
   } catch (e) {
     return NextResponse.json(

@@ -1,4 +1,5 @@
 import { NextAuthOptions } from "next-auth";
+import { getServerSession } from "next-auth/next";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "@/lib/db";
@@ -24,9 +25,11 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Registration stores emails lowercased, so normalise here too or
+        // "Ada@uni.edu" would never match the account it created.
         const user = await db.user.findUnique({
           where: {
-            email: credentials.email,
+            email: credentials.email.trim().toLowerCase(),
           },
         });
 
@@ -67,3 +70,15 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
+
+/**
+ * The signed-in user's id, or null when there is no valid session.
+ *
+ * Route handlers use this instead of reading the session directly: everything
+ * under /api/projects is scoped by owner, so the id is needed on every path
+ * that the session check guards anyway.
+ */
+export async function getSessionUserId(): Promise<string | null> {
+  const session = await getServerSession(authOptions);
+  return session?.user?.id ?? null;
+}

@@ -70,8 +70,10 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long");
+    // Keep in step with RegisterSchema in /api/auth/register, which rejects
+    // anything shorter regardless of what the form allows through.
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long");
       return;
     }
 

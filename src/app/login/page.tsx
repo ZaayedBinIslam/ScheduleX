@@ -25,7 +25,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,9 +223,6 @@ export default function LoginPage() {
                   <label htmlFor="password" className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
                     Password
                   </label>
-                  <Link href="/forgot-password" className="text-xs font-medium text-primary hover:underline underline-offset-2">
-                    Forgot password?
-                  </Link>
                 </div>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none transition-colors group-focus-within:text-primary">
@@ -251,20 +247,6 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Remember me */}
-              <div className="flex items-center space-x-2">
-                <input
-                  id="remember"
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary bg-background/50 transition-all cursor-pointer"
-                />
-                <label htmlFor="remember" className="text-xs font-semibold text-muted-foreground cursor-pointer select-none">
-                  Keep me signed in on this device
-                </label>
-              </div>
-
               {/* Submit CTA */}
               <motion.button
                 type="submit"
@@ -283,39 +265,6 @@ export default function LoginPage() {
                 )}
               </motion.button>
 
-              {/* Social login divider */}
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-border/80"></div>
-                <span className="flex-shrink mx-4 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">Or continue with</span>
-                <div className="flex-grow border-t border-border/80"></div>
-              </div>
-
-              {/* Social Login placeholders */}
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => signIn("google", { callbackUrl: "/" })}
-                  className="inline-flex items-center justify-center gap-2 h-9 rounded-xl border border-border/80 bg-background/30 text-xs font-semibold hover:bg-accent transition-colors"
-                >
-                  <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
-                    <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.186 4.114-3.51 0-6.357-2.827-6.357-6.314s2.848-6.315 6.357-6.315c1.613 0 3.082.593 4.22 1.568l3.072-3.037C19.123 2.457 15.892 1.3 12.24 1.3 6.012 1.3 1 6.257 1 12.5s5.012 11.2 11.24 11.2c6.22 0 11.24-5.012 11.24-11.2 0-.77-.09-1.505-.24-2.215H12.24z"/>
-                  </svg>
-                  <span>Google</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => signIn("azure-ad", { callbackUrl: "/" })}
-                  className="inline-flex items-center justify-center gap-2 h-9 rounded-xl border border-border/80 bg-background/30 text-xs font-semibold hover:bg-accent transition-colors"
-                >
-                  <svg className="h-4 w-4 shrink-0" viewBox="0 0 23 23">
-                    <path fill="#f35325" d="M0 0h11v11H0z"/>
-                    <path fill="#80bb0a" d="M12 0h11v11H12z"/>
-                    <path fill="#00a4ef" d="M0 12h11v11H0z"/>
-                    <path fill="#ffb900" d="M12 12h11v11H12z"/>
-                  </svg>
-                  <span>Microsoft</span>
-                </button>
-              </div>
             </form>
           </motion.div>
 
