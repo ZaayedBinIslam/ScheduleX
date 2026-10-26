@@ -249,3 +249,10 @@ ScheduleX is a front-end and workflow layer. **All the actual timetabling is don
 FET is an outstanding piece of free software and the entire generation engine here. If you use ScheduleX, please credit FET and consider supporting its authors. FET is distributed separately under its own license — nothing in this repository redistributes or modifies it.
 
 Also built on [Next.js](https://nextjs.org), [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com), [shadcn/ui](https://ui.shadcn.com), [Prisma](https://www.prisma.io) and [Bun](https://bun.sh).
+
+## Contributors
+1. Zaayed Bin Islam
+2. Md Abdul Ahad
+3. Abdullah kafi Chowdhury
+4. Junaid Bin Jahangir
+
